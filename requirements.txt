@@ -1,8 +1,4 @@
 # Requirements for the project
 pyperclip==1.9.0
-python-dotenv>=1.0.0
-
-# Development dependencies
-black==24.3.0
-isort==5.13.2
-flake8==7.0.0
+python-dotenv==1.1.1
+pillow==11.3.0

@@ -12,12 +12,6 @@ indent_style = space
 indent_size = 4
 trim_trailing_whitespace = true
 
-# Python specific settings
-[*.py]
-indent_style = space
-indent_size = 4
-max_line_length = 88
-
 # Markdown files (preserve trailing whitespace for line breaks)
 [*.md]
 trim_trailing_whitespace = false
@@ -29,7 +23,7 @@ indent_style = space
 indent_size = 2
 
 # YAML files
-[*.yml]
+[*.{yml,yaml}]
 indent_style = space
 indent_size = 2
 
@@ -38,8 +32,12 @@ indent_size = 2
 indent_style = space
 indent_size = 2
 
+# TOML files
+[*.toml]
+indent_style = space
+indent_size = 2
+
 # JavaScript files
 [*.js]
 indent_style = space
 indent_size = 2
-

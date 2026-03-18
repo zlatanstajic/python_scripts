@@ -22,7 +22,7 @@ Pipfile.lock
 
 # Editor & OS specific
 .DS_Store
-#.vscode/
+.vscode/
 .idea/
 *.swp
 *~
@@ -62,6 +62,9 @@ coverage.xml
 
 # Compiled extensions
 *.so
+.coverage
 
-# Custom files and folders
-assets/responses/
+# Default
+assets
+**/_build
+private
