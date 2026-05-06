@@ -275,7 +275,12 @@ Now you can run, for example, `generate_password -l 16` or `git_copy` from any d
 
 ---
 
+<details>
+<summary>
+
 ### Generate password
+
+</summary>
 
 * **File:** [`scripts/generate_password.py`](scripts/generate_password.py)
 * **Parameters:** Optional (`-l`, `--length`)
@@ -327,11 +332,18 @@ Password copied to clipboard!
    done
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Switch PHP version
+
+</summary>
 
 * **File:** [`scripts/php_switch.py`](scripts/php_switch.py)
 * **Parameters:** Optional (`-v`, `--version`)
@@ -417,11 +429,18 @@ PHP 8.3.7 (cli) (built: Jun  1 2025 12:00:00) ( NTS )
    php -m | grep -E 'pdo|json|curl'
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Development setup
+
+</summary>
 
 * **File:** [`scripts/dev_setup.py`](scripts/dev_setup.py)
 * **Parameters:** `--number` (required), `--name` (required)
@@ -535,11 +554,18 @@ For clipboard support, you may need to install `xclip` or `xsel` on Linux.
    git push origin issues/555_refactor_payment_module
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Backup files
+
+</summary>
 
 * **File:** [`scripts/backup.py`](scripts/backup.py)
 * **Parameters:** None (use `-h` for help)
@@ -632,11 +658,18 @@ Completed all backup steps.
    python3 scripts/backup.py
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Copy changed files between git commits
+
+</summary>
 
 * **File:** [`scripts/git_copy.py`](scripts/git_copy.py)
 * **Parameters:** Optional (`start_commit_hash`, `end_commit_hash`, `target_directory_path`)
@@ -719,11 +752,18 @@ Deleted copied folder: /home/your-username/Documents/git_copy/myproject
    # Perfect for sending to clients without entire project
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Restore VS Code folder
+
+</summary>
 
 * **File:** [`scripts/restore_vscode_folder.py`](scripts/restore_vscode_folder.py)
 * **Parameters:** None (use `-h` or `--help` for help)
@@ -813,11 +853,18 @@ No backup found at /home/your-username/Documents/backup/automated/projects/pytho
    fi
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Hash and Move Filenames
+
+</summary>
 
 * **File:** [`scripts/hash_filenames.py`](scripts/hash_filenames.py)
 * **Parameters:** Optional (`-d`, `--directory`, `-v`, `--verbose`, `-m`, `--move`)
@@ -899,11 +946,18 @@ Deleted empty folder:
    # Only processes files matching extensions in .env
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Splice Images
+
+</summary>
 
 * **File:** [`scripts/splice_images.py`](scripts/splice_images.py)
 * **Parameters:** Optional (`-i`, `--images`, `-o`, `--output`, `--width`, `--height`, `-n`, `--number`)
@@ -987,11 +1041,18 @@ Moved img3.jpg to standalone_images/img3.jpg
    # Creates spliced images in each set's folder
    ```
 
+</details>
+
 [⬆ back to available scripts](#available-scripts)
 
 ---
 
+<details>
+<summary>
+
 ### Splice Videos
+
+</summary>
 
 * **File:** [`scripts/splice_videos.py`](scripts/splice_videos.py)
 * **Parameters:** Required (`-i`, `--input_video`, `-d`, `--duration`), Optional (`-s`, `--segment`)
@@ -1068,6 +1129,8 @@ Output location:   /home/your-username/repos/python_scripts/assets/spliced/outpu
    python3 scripts/splice_videos.py -i raw_footage.mp4 -d 5 -s 1
    # Quick 5-second preview before committing to full import
    ```
+
+</details>
 
 [⬆ back to available scripts](#available-scripts)
 
