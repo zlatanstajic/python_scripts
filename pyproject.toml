@@ -27,7 +27,13 @@ classifiers = [
   "Topic :: Utilities",
 ]
 
-dependencies = ["pyperclip>=1.9.0", "python-dotenv>=1.1.1", "pillow>=11.3.0"]
+dependencies = [
+  "Markdown>=3.5.0",
+  "WeasyPrint>=60.0",
+  "pillow>=11.3.0",
+  "pyperclip>=1.9.0",
+  "python-dotenv>=1.1.1",
+]
 
 [project.optional-dependencies]
 dev = [

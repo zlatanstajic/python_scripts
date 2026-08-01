@@ -3,7 +3,6 @@ name: Deploy Documentation to GitHub Pages
 on:
   push:
     branches:
-    - main
     - master
     paths:
     - 'docs/**'
@@ -15,7 +14,6 @@ on:
     - '.github/workflows/deploy-docs.yml'
   pull_request:
     branches:
-    - main
     - master
     paths:
     - 'docs/**'
@@ -67,7 +65,7 @@ jobs:
         path: docs/_build/html
 
   deploy:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

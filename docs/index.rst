@@ -56,6 +56,7 @@ Available Scripts
 * :doc:`Hash Filenames </api_reference/scripts/hash_filenames>` - Hash and organize filenames
 * :doc:`Splice Images </api_reference/scripts/splice_images>` - Splice images horizontally
 * :doc:`Splice Videos </api_reference/scripts/splice_videos>` - Splice video segments
+* :ref:`CV Generator <cv-generator>` - Convert a Markdown CV to a single-page A4 PDF
 
 Project Structure
 -----------------
@@ -70,6 +71,7 @@ Project Structure
    │   └── __init__.py
    ├── scripts/
    │   ├── backup.py
+   │   ├── cv_generator.py
    │   ├── dev_setup.py
    │   ├── generate_password.py
    │   ├── git_copy.py

@@ -243,6 +243,35 @@ For detailed usage instructions for specific scripts, see:
 * :doc:`Hash Filenames </api_reference/scripts/hash_filenames>` - ``scripts/hash_filenames.py``
 * :doc:`Splice Images </api_reference/scripts/splice_images>` - ``scripts/splice_images.py``
 * :doc:`Splice Videos </api_reference/scripts/splice_videos>` - ``scripts/splice_videos.py``
+* :ref:`CV Generator <cv-generator>` - ``scripts/cv_generator.py``
+
+Generate a CV PDF
+~~~~~~~~~~~~~~~~~
+
+Configure the Markdown input and PDF output in the ``.env`` file in your
+current working directory:
+
+.. code-block:: text
+
+   MARKDOWN_FILE_URL="cv.md"
+   PDF_OUTPUT_LOCATION="cv.pdf"
+
+Then run:
+
+.. code-block:: bash
+
+   python3 scripts/cv_generator.py
+
+Use a level-three heading with a final pipe to place experience dates on the
+right while preserving inline links and emphasis:
+
+.. code-block:: markdown
+
+   ### [Senior Engineer](https://example.com) / **Example Co** | *2022–Present*
+
+The command prints ``PDF generated successfully.`` when the CV fits on one
+page. If it cannot fit using the supported compact profiles, it exits with an
+error and leaves any existing output unchanged.
 
 Error Handling
 --------------

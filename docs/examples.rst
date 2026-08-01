@@ -103,6 +103,39 @@ Complete Workflow
    git add src/database.py
    git commit  # Paste the copied message
 
+CV Generator Example
+--------------------
+
+Create ``cv.md`` in the project root:
+
+.. code-block:: markdown
+
+   # Candidate Name
+
+   candidate@example.com | +381 11 555 0100 | Belgrade, Serbia
+
+   ## Experience
+
+   ### [Senior Engineer](https://example.com) / **Example Co** | *2022–Present*
+
+   - Built and operated reliable services.
+
+Configure the source and output in ``.env``:
+
+.. code-block:: text
+
+   MARKDOWN_FILE_URL="cv.md"
+   PDF_OUTPUT_LOCATION="cv.pdf"
+
+Generate the PDF:
+
+.. code-block:: bash
+
+   python3 scripts/cv_generator.py
+
+The generated PDF contains selectable text and is written only after a
+single-page render succeeds.
+
 Backup Examples
 ---------------
 

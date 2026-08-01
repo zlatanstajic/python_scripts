@@ -25,6 +25,7 @@
   * [Hash and Move Filenames](#hash-and-move-filenames)
   * [Splice Images](#splice-images)
   * [Splice Videos](#splice-videos)
+  * [CV Generator](#cv-generator)
 * [Contributing](#contributing)
 * [License](#license)
 
@@ -103,7 +104,7 @@ This project uses **PEP 621 compliant `pyproject.toml`** for dependency and tool
 
 - **Python Version**: 3.10+
 - **Build System**: setuptools with wheel backend
-- **Core Dependencies**: pyperclip, python-dotenv, pillow
+- **Core Dependencies**: pyperclip, python-dotenv, pillow, Markdown, WeasyPrint
 - **Development Tools Configuration**:
   - **Black**: Line length 88, Python 3.10+
   - **isort**: Black-compatible profile
@@ -147,12 +148,12 @@ Comprehensive documentation is available in the `docs/` directory and includes:
 
 ### Online Documentation
 
-This project's documentation is automatically built and deployed to GitHub Pages on every push to the main branch:
+This project's documentation is automatically built and deployed to GitHub Pages on every push to the master branch:
 
 **View Online Documentation:** https://zlatanstajic.github.io/python_scripts/
 
 The documentation is built and deployed automatically when:
-- Code is pushed to `main` or `master` branch
+- Code is pushed to the `master` branch
 - Documentation files in `docs/` are modified
 - Source code in `src/` or `scripts/` is modified
 - Project configuration changes
@@ -198,7 +199,7 @@ This project uses **GitHub Actions** for automated continuous integration and co
 ### Automated Workflows
 
 **1. Deploy Documentation** (`.github/workflows/deploy-docs.yml`)
-- Builds Sphinx documentation on every push to main branch
+- Builds Sphinx documentation on every push to the master branch
 - Automatically deploys to GitHub Pages
 - Triggers on changes to docs, source code, or configuration
 
@@ -270,6 +271,7 @@ Now you can run, for example, `generate_password -l 16` or `git_copy` from any d
 * [Hash and Move Filenames](#hash-and-move-filenames)
 * [Splice Images](#splice-images)
 * [Splice Videos](#splice-videos)
+* [CV Generator](#cv-generator)
 
 [⬆ back to top](#table-of-contents)
 
@@ -480,7 +482,7 @@ python3 scripts/dev_setup.py --number 123 --name "Fix login bug"
 Located in directory: myproject
 
 Available branches:
-1. main
+1. master
 2. develop
 3. feature/old-task
 
@@ -1129,6 +1131,69 @@ Output location:   /home/your-username/repos/python_scripts/assets/spliced/outpu
    python3 scripts/splice_videos.py -i raw_footage.mp4 -d 5 -s 1
    # Quick 5-second preview before committing to full import
    ```
+
+</details>
+
+[⬆ back to available scripts](#available-scripts)
+
+---
+
+<details>
+<summary>
+
+### CV Generator
+
+</summary>
+
+* **File:** [`scripts/cv_generator.py`](scripts/cv_generator.py)
+* **Configuration:** Required in the current directory's `.env` file
+* **Description:** Converts a Markdown CV into a selectable-text, ATS-friendly,
+  single-page A4 PDF with compact typography.
+
+**Setup:**
+
+Install the pinned runtime dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Define the source and destination in `.env`. Relative paths are resolved from
+the directory where the command is run; absolute paths and local `file://` URLs
+are also supported.
+
+```dotenv
+MARKDOWN_FILE_URL="cv.md"
+PDF_OUTPUT_LOCATION="cv.pdf"
+```
+
+Create `cv.md`, then run:
+
+```bash
+python3 scripts/cv_generator.py
+```
+
+On success the script prints `PDF generated successfully.`
+
+**Experience heading convention:**
+
+Use a level-three heading and a final pipe to align role/company content left
+and dates right. Inline Markdown, including links and emphasis, is preserved.
+
+```markdown
+### [Senior Engineer](https://example.com) / **Example Co** | *2022–Present*
+```
+
+**Single-page fitting and errors:**
+
+The generator first renders the requested 10pt body style. If it spans more
+than one page, it retries deterministic compact profiles, with lower limits of
+8.5pt body text and 1.25 line height. It never clips content. If the CV still
+does not fit, the command exits with an error asking you to shorten the source.
+The PDF is written atomically, so a failed render cannot partially overwrite an
+existing output; the error explicitly says when an earlier PDF was left
+unchanged. Missing `.env` settings, source files, and unsupported remote URLs
+also produce clear errors and a nonzero exit status.
 
 </details>
 

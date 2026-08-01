@@ -4,7 +4,9 @@ Thanks for considering a contribution! This file explains the recommended way to
 
 ## Quick start
 
-- Fork the repository and create a branch for your change (use `feature/` or `fix/` prefixes).
+- Fork the repository and create a branch named `issues/[issue-slug]` (for
+  example, `issues/add-cv-generator`). This is the only supported branch-name
+  format.
 - Make focused, small changes and update or add files under the appropriate folder (for example `scripts/` or `src/`).
 - Open a Pull Request (PR) describing the change and link any related issue.
 

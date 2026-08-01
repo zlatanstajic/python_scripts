@@ -51,20 +51,20 @@ You can view these files by navigating to the `.github/workflows/` directory in 
 
 **Option A: Automatic (Recommended)**
 
-Push code to the main branch:
+Push code to the ``master`` branch:
 
 .. code-block:: bash
 
    git add .
    git commit -m "Enable GitHub Pages deployment"
-   git push origin main
+   git push origin master
 
 **Option B: Manual Trigger**
 
 a. Go to the **Actions** tab in your repository
 b. On the left, select **"Deploy Documentation to GitHub Pages"**
 c. Click the **"Run workflow"** button (right side)
-d. Select **main** branch
+d. Select the **master** branch
 e. Click **"Run workflow"**
 
 5. Wait for Deployment
@@ -130,8 +130,7 @@ Change the ``on.push.branches`` section:
    on:
      push:
        branches:
-         - main      # Change to your branch name
-         - master
+         - master    # Change to your branch name
 
 Excluding Paths From Triggering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -63,6 +63,9 @@ Install runtime dependencies:
 
    pip install -r requirements.txt
 
+This installs the Markdown and WeasyPrint packages required by the CV
+generator, along with the dependencies used by the other scripts.
+
 Install development dependencies (for testing and contributing):
 
 .. code-block:: bash
@@ -152,7 +155,8 @@ Ensure your user has proper sudo access or the scripts may fail.
 Online Documentation
 --------------------
 
-This project's documentation is automatically deployed to GitHub Pages on each push to the main branch.
+This project's documentation is automatically deployed to GitHub Pages on
+each push to the ``master`` branch.
 
 **To access the online documentation:**
 
@@ -162,7 +166,7 @@ This project's documentation is automatically deployed to GitHub Pages on each p
 
 **Documentation is built and deployed automatically when:**
 
-* Code is pushed to the ``main`` or ``master`` branch
+* Code is pushed to the ``master`` branch
 * Documentation files in ``docs/`` are modified
 * Source code in ``src/`` or ``scripts/`` is modified
 * Project configuration (``pyproject.toml``) is changed

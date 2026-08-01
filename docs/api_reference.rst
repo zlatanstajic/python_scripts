@@ -241,6 +241,46 @@ scripts.splice_videos
 
    python3 -m scripts.splice_videos -i input.mp4 -d 30 -s 3
 
+.. _cv-generator:
+
+scripts.cv_generator
+~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: scripts.cv_generator
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Converts a local Markdown CV to a selectable-text, ATS-friendly, single-page
+A4 PDF. The renderer tries progressively more compact typography profiles and
+fails without replacing an existing output if the document cannot fit within
+the supported 8.5pt font and 1.25 line-height limits.
+
+**Key Functions:**
+
+- ``load_environment(env_file)`` - Loads configuration without overriding
+  existing environment variables
+- ``local_path(value, base_directory)`` - Resolves local paths and ``file://``
+  URLs
+- ``markdown_to_html(markdown_text, profile)`` - Converts Markdown to styled
+  HTML
+- ``generate_pdf(source, destination)`` - Renders and atomically writes a
+  one-page PDF
+
+**Environment Variables:**
+
+- ``MARKDOWN_FILE_URL`` - Markdown source path or local ``file://`` URL
+- ``PDF_OUTPUT_LOCATION`` - Destination PDF path
+
+Relative paths are resolved from the directory where the command is run.
+Remote URLs are not supported.
+
+**Usage:**
+
+.. code-block:: bash
+
+   python3 -m scripts.cv_generator
+
 Data Types and Constants
 ------------------------
 

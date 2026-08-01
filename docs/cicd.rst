@@ -22,7 +22,7 @@ Deploy Documentation to GitHub Pages
 
 **Trigger Events:**
 
-* Push to ``main`` or ``master`` branch
+* Push to the ``master`` branch
 * Changes to documentation (``docs/``)
 * Changes to source code (``src/``, ``scripts/``)
 * Changes to configuration (``pyproject.toml``, ``requirements*.txt``)
@@ -42,7 +42,8 @@ Deploy Documentation to GitHub Pages
 After deployment, documentation is available at:
 ``https://zlatanstajic.github.io/python_scripts/``
 
-The workflow automatically keeps documentation in sync with the main branch.
+The workflow automatically keeps documentation in sync with the ``master``
+branch.
 
 Code Quality & Testing
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -51,7 +52,7 @@ Code Quality & Testing
 
 **Trigger Events:**
 
-* Push to ``main``, ``master``, or ``develop`` branches
+* Push to the ``master`` or ``develop`` branches
 * Pull requests to those branches
 * Changes to code, tests, or configuration
 * Manual trigger via workflow_dispatch
@@ -130,7 +131,7 @@ If this is your first deployment:
 
 3. **First Deployment:**
 
-   * Push to main branch or trigger workflow manually
+   * Push to the ``master`` branch or trigger the workflow manually
    * Check **Actions** tab for workflow status
    * Once complete, documentation will be available at GitHub Pages URL
 

@@ -50,11 +50,14 @@ Getting Started
 Development Workflow
 --------------------
 
-1. **Create a feature branch:**
+1. **Create an issue branch:**
+
+   Use ``issues/[issue-slug]`` for every contribution. This is the only
+   supported branch-name format; choose a short, descriptive, kebab-case slug.
 
    .. code-block:: bash
 
-      git checkout -b feature/your-feature-name
+      git checkout -b issues/your-issue-slug
 
 2. **Make your changes** and commit with descriptive messages:
 
@@ -81,7 +84,7 @@ Development Workflow
 
    .. code-block:: bash
 
-      git push origin feature/your-feature-name
+      git push origin issues/your-issue-slug
 
 5. **Create a Pull Request** on GitHub
 
