@@ -5,7 +5,7 @@
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://zlatanstajic.github.io/python_scripts/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-> A collection of Python command-line utilities for development setup, backups, file management, media processing, password generation, PHP switching, VS Code restoration, and single-page CV generation.
+> A collection of Python command-line utilities for development setup, backups, file management, media processing, password generation, PHP switching, VS Code restoration, single-page CV generation, and website screenshots.
 
 📖 **Browse the docs:** [zlatanstajic.github.io/python_scripts](https://zlatanstajic.github.io/python_scripts/) (source in [`docs/`](docs/), published via GitHub Pages).
 
@@ -47,6 +47,12 @@ cp .env.example .env
 
 On Linux, clipboard operations through `pyperclip` may also require `xclip` or `xsel`. The media scripts require `ffmpeg` (and video splicing also uses `ffprobe`); PHP switching requires a system that manages PHP through `update-alternatives` and permission to run it with `sudo`.
 
+The screenshot script also needs a Chromium build that `pip` does not download. Install it once per machine after the requirements are in place; it is a separate download of several hundred megabytes:
+
+```bash
+playwright install chromium
+```
+
 For tests, documentation, and quality tools, install the development extras instead:
 
 ```bash
@@ -59,7 +65,7 @@ python -m pip install -e ".[dev]"
 
 ## List of Available Scripts
 
-The repository contains ten utilities. Run commands from the repository root unless an entry says otherwise.
+The repository contains eleven utilities. Run commands from the repository root unless an entry says otherwise.
 
 <details markdown="1">
 <summary><strong>Backup</strong> — <a href="scripts/backup.py"><code>scripts/backup.py</code></a></summary>
@@ -197,6 +203,24 @@ Restore   : python scripts/restore_vscode_folder.py
 
 No command-line options other than -h/--help.
 BACKUP_LOCATION and PROJECTS_DESTINATION_FOLDER_NAME are required in .env.
+```
+
+</details>
+
+<details markdown="1">
+<summary><strong>Screenshot</strong> — <a href="scripts/screenshot.py"><code>scripts/screenshot.py</code></a></summary>
+
+Captures one desktop screenshot per configured website with Playwright. Chromium is launched once and each site is opened in a fresh context sized to a 1600x900 viewport at scale factor 1, with animations suppressed and known cookie banners removed before capture. Every site is saved as a 1600x900 JPEG named after its hostname, overwriting the file from the previous run. A failing site is reported and does not stop the others; the exit code is non-zero when any site failed.
+
+```text
+Show help     : python scripts/screenshot.py --help
+Capture sites : python scripts/screenshot.py
+
+There are no command-line options other than --help.
+It reads .env from the current working directory:
+SCREENSHOT_SITES       Comma-separated http(s) website URLs (required)
+SCREENSHOT_OUTPUT_DIR  Destination directory for the JPEG files
+                       (default: ~/Pictures)
 ```
 
 </details>

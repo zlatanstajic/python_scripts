@@ -65,6 +65,7 @@ coverage.xml
 .coverage
 
 # Default
+.agency
 assets
 **/_build
 private

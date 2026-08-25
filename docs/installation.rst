@@ -13,6 +13,7 @@ Optional Dependencies
 
 * ``xclip`` or ``xsel`` - For clipboard support on Linux systems
 * ``ffmpeg`` - For video and image splicing scripts
+* Playwright Chromium build - For the website screenshot script
 * ``git`` - For git-related scripts
 
 Installation Steps
@@ -64,7 +65,16 @@ Install runtime dependencies:
    pip install -r requirements.txt
 
 This installs the Markdown and WeasyPrint packages required by the CV
-generator, along with the dependencies used by the other scripts.
+generator, the Playwright package required by the screenshot script, and
+the dependencies used by the other scripts.
+
+Playwright needs a Chromium build that ``pip`` does not download. Install it
+once per machine before running the screenshot script; it is a separate
+download of several hundred megabytes:
+
+.. code-block:: bash
+
+   playwright install chromium
 
 Install development dependencies (for testing and contributing):
 
@@ -135,6 +145,18 @@ For scripts that splice images or videos:
    # For macOS (with Homebrew):
    brew install ffmpeg
 
+**For Website Screenshots:**
+
+The screenshot script drives a headless Chromium build that Playwright
+downloads separately from the Python packages:
+
+.. code-block:: bash
+
+   playwright install chromium
+
+   # Install the shared libraries Chromium needs (Debian/Ubuntu):
+   sudo playwright install-deps chromium
+
 Troubleshooting
 ---------------
 
@@ -193,6 +215,17 @@ If video/image splicing scripts fail:
 1. Verify ffmpeg is installed: ``which ffmpeg``
 2. Install ffmpeg using your package manager (see Linux-Specific Setup above)
 3. Ensure ffmpeg is in your system PATH
+
+**Chromium Browser Not Found**
+
+If the screenshot script reports a missing executable or a failure to launch
+the browser:
+
+1. Download the browser bundle: ``playwright install chromium``
+2. Install the shared libraries Chromium needs:
+   ``sudo playwright install-deps chromium``
+3. Verify the Python package is installed in the active environment:
+   ``pip show playwright``
 
 Environment Configuration
 ---------------------------

@@ -57,6 +57,7 @@ Available Scripts
 * :doc:`Splice Images </api_reference/scripts/splice_images>` - Splice images horizontally
 * :doc:`Splice Videos </api_reference/scripts/splice_videos>` - Splice video segments
 * :ref:`CV Generator <cv-generator>` - Convert a Markdown CV to a single-page A4 PDF
+* :ref:`Screenshot <screenshot>` - Capture 1600x900 JPEG website screenshots
 
 Project Structure
 -----------------
@@ -78,6 +79,7 @@ Project Structure
    │   ├── hash_filenames.py
    │   ├── php_switch.py
    │   ├── restore_vscode_folder.py
+   │   ├── screenshot.py
    │   ├── splice_images.py
    │   └── splice_videos.py
    ├── tests/

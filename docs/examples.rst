@@ -136,6 +136,42 @@ Generate the PDF:
 The generated PDF contains selectable text and is written only after a
 single-page render succeeds.
 
+Screenshot Example
+------------------
+
+Download the Chromium bundle once:
+
+.. code-block:: bash
+
+   playwright install chromium
+
+Configure the websites in ``.env``, leaving the output directory at its
+default:
+
+.. code-block:: text
+
+   SCREENSHOT_SITES="https://example.com,https://subdomain.example.com/page"
+
+Capture the screenshots:
+
+.. code-block:: bash
+
+   python3 scripts/screenshot.py
+
+   # Output:
+   # [OK] https://example.com
+   # [OK] https://subdomain.example.com/page
+   # Finished: 2 succeeded, 0 failed.
+
+Two 1600x900 JPEG files are written to ``~/Pictures``:
+
+.. code-block:: text
+
+   example.com.jpg
+   subdomain.example.com.jpg
+
+Running the command again replaces those files in place.
+
 Backup Examples
 ---------------
 

@@ -244,6 +244,7 @@ For detailed usage instructions for specific scripts, see:
 * :doc:`Splice Images </api_reference/scripts/splice_images>` - ``scripts/splice_images.py``
 * :doc:`Splice Videos </api_reference/scripts/splice_videos>` - ``scripts/splice_videos.py``
 * :ref:`CV Generator <cv-generator>` - ``scripts/cv_generator.py``
+* :ref:`Screenshot <screenshot>` - ``scripts/screenshot.py``
 
 Generate a CV PDF
 ~~~~~~~~~~~~~~~~~
@@ -272,6 +273,36 @@ right while preserving inline links and emphasis:
 The command prints ``PDF generated successfully.`` when the CV fits on one
 page. If it cannot fit using the supported compact profiles, it exits with an
 error and leaves any existing output unchanged.
+
+Capture Website Screenshots
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Download the Chromium bundle once per machine:
+
+.. code-block:: bash
+
+   playwright install chromium
+
+List the websites in the ``.env`` file in your current working directory.
+``SCREENSHOT_SITES`` is required; ``SCREENSHOT_OUTPUT_DIR`` is optional and
+defaults to ``~/Pictures``:
+
+.. code-block:: text
+
+   SCREENSHOT_SITES="https://example.com,https://example.org"
+   SCREENSHOT_OUTPUT_DIR="/home/your-username/Pictures"
+
+Then run:
+
+.. code-block:: bash
+
+   python3 scripts/screenshot.py
+
+Each site is saved as a 1600x900 JPEG named after its hostname, so
+``https://subdomain.example.com/page`` becomes ``subdomain.example.com.jpg``
+and every run overwrites the previous file. The command prints an ``[OK]`` or
+``[FAILED]`` line per site followed by a ``Finished: N succeeded, M failed.``
+summary, and exits with a non-zero status when any site failed.
 
 Error Handling
 --------------

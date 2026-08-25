@@ -281,6 +281,53 @@ Remote URLs are not supported.
 
    python3 -m scripts.cv_generator
 
+.. _screenshot:
+
+scripts.screenshot
+~~~~~~~~~~~~~~~~~~
+
+.. automodule:: scripts.screenshot
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Captures one desktop screenshot per configured website through Playwright.
+Chromium is launched once per run and every site is opened in a fresh
+context sized to a 1600x900 viewport at scale factor 1, with animations
+suppressed and known cookie banners removed before capture. Each capture is
+written as a 1600x900 JPEG named after the hostname, replacing the file from
+the previous run.
+
+**Key Functions:**
+
+- ``load_environment(env_file)`` - Loads configuration without overriding
+  existing environment variables
+- ``load_config()`` - Validates the site list and prepares the output
+  directory
+- ``hostname_to_filename(url)`` - Maps a URL to its ``<hostname>.jpg``
+  filename
+- ``hide_cookie_banners(page)`` - Removes known consent banners, tolerating
+  selectors that match nothing
+- ``capture_website(browser, url, output_directory)`` - Captures one site as
+  a 1600x900 JPEG
+
+**Environment Variables:**
+
+- ``SCREENSHOT_SITES`` - Comma-separated ``http``/``https`` website URLs
+  (required)
+- ``SCREENSHOT_OUTPUT_DIR`` - Destination directory (optional, defaults to
+  ``~/Pictures``)
+
+A failing site is reported and does not stop the remaining sites; the exit
+code is non-zero when at least one site failed. The Chromium bundle must be
+downloaded once with ``playwright install chromium``.
+
+**Usage:**
+
+.. code-block:: bash
+
+   python3 -m scripts.screenshot
+
 Data Types and Constants
 ------------------------
 
