@@ -17,7 +17,6 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
-    "sphinx.ext.intersphinx",
     "sphinx_autodoc_typehints",
 ]
 
@@ -46,8 +45,3 @@ autodoc_default_options = {
 
 # -- Options for autosummary --
 autosummary_generate = True
-
-# -- Intersphinx configuration --
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-}

@@ -6,7 +6,6 @@ on:
     - master
     - develop
     paths:
-    - 'src/**'
     - 'scripts/**'
     - 'tests/**'
     - '*.toml'
@@ -44,7 +43,7 @@ jobs:
 
     - name: Lint with flake8
       run: |
-        python -m flake8 src/ scripts/
+        python -m flake8 scripts/
 
     - name: Check import sorting with isort
       run: |
@@ -56,15 +55,15 @@ jobs:
 
     - name: Type checking with mypy
       run: |
-        python -m mypy src/ scripts/
+        python -m mypy scripts/
 
     - name: Docstring validation with pydocstyle
       run: |
-        python -m pydocstyle src/ scripts/
+        python -m pydocstyle scripts/
 
     - name: Security scanning with bandit
       run: |
-        python -m bandit -r src/ scripts/ -ll
+        python -m bandit -r scripts/ -ll
       continue-on-error: true
 
   tests:
@@ -91,7 +90,7 @@ jobs:
 
     - name: Run tests with pytest
       run: |
-        python -m pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
+        python -m pytest tests/ -v --cov=scripts --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

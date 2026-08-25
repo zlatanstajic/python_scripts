@@ -7,7 +7,7 @@ Thanks for considering a contribution! This file explains the recommended way to
 - Fork the repository and create a branch named `issues/[issue-slug]` (for
   example, `issues/add-cv-generator`). This is the only supported branch-name
   format.
-- Make focused, small changes and update or add files under the appropriate folder (for example `scripts/` or `src/`).
+- Make focused, small changes and update files under `scripts/`, `tests/`, or `docs/` as appropriate.
 - Open a Pull Request (PR) describing the change and link any related issue.
 
 ## Issues
@@ -23,7 +23,7 @@ Thanks for considering a contribution! This file explains the recommended way to
 
 ## Adding new scripts
 
-- Add new Python files in the appropriate folder (e.g., `scripts/` or `src/`).
+- Add executable Python utilities under `scripts/` and their tests under `tests/`.
 - Use descriptive filenames (snake_case) and include docstrings and comments.
 - Cite sources or references where appropriate.
 

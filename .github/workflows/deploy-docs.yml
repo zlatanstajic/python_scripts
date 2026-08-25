@@ -6,7 +6,6 @@ on:
     - master
     paths:
     - 'docs/**'
-    - 'src/**'
     - 'scripts/**'
     - 'pyproject.toml'
     - 'requirements.txt'
@@ -17,7 +16,6 @@ on:
     - master
     paths:
     - 'docs/**'
-    - 'src/**'
     - 'scripts/**'
   workflow_dispatch:
 

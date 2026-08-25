@@ -28,35 +28,35 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Running flake8..."
-python -m flake8 src/ scripts/
+python -m flake8 scripts/
 if [ $? -ne 0 ]; then
     echo "Flake8 failed. Please fix the issues."
     exit 1
 fi
 
 echo "Running bandit for security checks..."
-python -m bandit -r src/ scripts/ -ll
+python -m bandit -r scripts/ -ll
 if [ $? -ne 0 ]; then
     echo "Bandit found security issues. Please fix them."
     exit 1
 fi
 
 echo "Running pydocstyle docstring validation..."
-python -m pydocstyle src/ scripts/
+python -m pydocstyle scripts/
 if [ $? -ne 0 ]; then
     echo "Pydocstyle failed. Please fix docstrings."
     exit 1
 fi
 
 echo "Running mypy type checking..."
-python -m mypy src/ scripts/
+python -m mypy scripts/
 if [ $? -ne 0 ]; then
     echo "Mypy failed. Please fix type hints."
     exit 1
 fi
 
 echo "Running tests with coverage..."
-python -m pytest tests/ --cov=src --cov-report=term-missing
+python -m pytest tests/ --cov=scripts --cov-report=term-missing
 if [ $? -ne 0 ]; then
     echo "Tests failed. Please fix them."
     exit 1
