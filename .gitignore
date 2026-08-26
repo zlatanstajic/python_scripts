@@ -66,6 +66,9 @@ coverage.xml
 
 # Default
 .agency
-assets
+assets/*
+!assets/img/
+assets/img/*
+!assets/img/og-image.png
 **/_build
 private

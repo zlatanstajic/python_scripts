@@ -1,51 +1,47 @@
-# Contributing to Python Scripts
+# Contributing
 
-Thanks for considering a contribution! This file explains the recommended way to propose changes so maintainers can review and merge them quickly.
+Contributions are welcome. To propose a change:
 
-## Quick start
+1. **Open an issue, fork, and branch.** Open or identify the issue for the
+   change, fork the repository, then create a branch off `master`. Every
+   contribution branch must use the `issues/` prefix; use
+   `issues/<issue-number>_<short_description>` (for example,
+   `issues/12_add_cv_generator`).
+2. **Edit the source files.** Application code belongs in [`scripts/`](scripts/),
+   tests in [`tests/`](tests/), documentation in [`docs/`](docs/), and
+   maintainer-only utilities in [`tools/`](tools/). Keep changes focused and
+   add or update tests whenever behavior changes.
+3. **Match the conventions.** Target Python 3.10 or newer, follow PEP 8, use
+   `snake_case`, add type hints where practical, and write Google-style
+   docstrings. Keep lines within 88 characters. Read configuration through
+   `python-dotenv`, document new keys in [`.env.example`](.env.example), and
+   never commit a real `.env` file or secret.
+4. **Keep documentation and dependencies synchronized.** Update
+   [`README.md`](README.md) and the relevant Sphinx pages when commands,
+   configuration, or behavior change. Add runtime dependencies to both
+   [`pyproject.toml`](pyproject.toml) and
+   [`requirements.txt`](requirements.txt); add development dependencies to
+   `pyproject.toml` and [`requirements-dev.txt`](requirements-dev.txt).
+5. **Test before submitting.** Install the development dependencies, then run
+   the project checks:
 
-- Fork the repository and create a branch named `issues/[issue-slug]` (for
-  example, `issues/add-cv-generator`). This is the only supported branch-name
-  format.
-- Make focused, small changes and update files under `scripts/`, `tests/`, or `docs/` as appropriate.
-- Open a Pull Request (PR) describing the change and link any related issue.
+   ```bash
+   python -m pytest tests/
+   python -m compileall -q scripts tests
+   python -m flake8 scripts/
+   python -m mypy scripts/
+   python -m pydocstyle scripts/
+   python -m bandit -r scripts/ -ll
+   python -m isort . --profile black --check-only --diff
+   python -m black . --check --diff
+   python -m sphinx -W -b html docs docs/_build/html
+   ```
 
-## Issues
+6. **Open a pull request.** Push the `issues/` branch and open a PR against
+   `master`. Keep it focused, link the issue (for example, `Fixes #123`),
+   explain what changed and why, list the checks you ran, and include examples,
+   command output, or screenshots when useful.
 
-- Open an issue to start a discussion for larger changes or new sections.
-- For bug reports include steps to reproduce and any relevant environment details.
-
-## Pull Requests
-
-- Keep PRs small and scoped to a single purpose.
-- Use clear titles and a detailed description. Reference the issue number when applicable (e.g. "Fixes #123").
-- Include examples, command output, or screenshots when helpful.
-
-## Adding new scripts
-
-- Add executable Python utilities under `scripts/` and their tests under `tests/`.
-- Use descriptive filenames (snake_case) and include docstrings and comments.
-- Cite sources or references where appropriate.
-
-## Style and formatting
-
-- Use Python best practices. Follow PEP 8. Use type hints where possible.
-- Include tests for new functionality in the `tests/` directory.
-- Keep lines reasonably short and use clear, actionable code.
-
-## Commit messages
-
-- Use concise messages describing the change. Example formats:
-  - `fix: correct typo in mysql cheatsheet`
-  - `feat: add npm script examples`
-
-## License and conduct
-
-- By contributing you agree your contributions will be licensed under the repository's MIT License (see `LICENSE`).
-- Be respectful in issues and PRs. If you think a code of conduct should be added, please open an issue.
-
-## Contact
-
-If you need to reach the maintainer directly, use <contact@zlatanstajic.com>.
-
-Thanks — we appreciate your help improving this collection!
+By contributing, you agree that your contribution will be licensed under the
+repository's [MIT License](LICENSE.md). Be respectful in issues and pull
+requests.
