@@ -4,9 +4,10 @@ Contributions are welcome. To propose a change:
 
 1. **Open an issue, fork, and branch.** Open or identify the issue for the
    change, fork the repository, then create a branch off `master`. Every
-   contribution branch must use the `issues/` prefix; use
-   `issues/<issue-number>_<short_description>` (for example,
-   `issues/12_add_cv_generator`).
+   contribution branch must use the `issues/` prefix followed by a
+   kebab-case name: `issues/<issue-number>-<short-description>` (for example,
+   `issues/12-add-cv-generator`). Write the description in lowercase words
+   separated by single hyphens — never `snake_case`, camelCase, or spaces.
 2. **Edit the source files.** Application code belongs in [`scripts/`](scripts/),
    tests in [`tests/`](tests/), documentation in [`docs/`](docs/), and
    maintainer-only utilities in [`tools/`](tools/). Keep changes focused and

@@ -13,6 +13,7 @@ the final pipe is aligned left, while the dates are aligned right.
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import tempfile
@@ -368,8 +369,20 @@ def generate_pdf(source: Path, destination: Path) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
+def parse_arguments() -> None:
+    """Parse command-line arguments, providing `-h`/`--help` and rejecting others."""
+    parser = argparse.ArgumentParser(
+        description="Render the Markdown CV at MARKDOWN_FILE_URL as a "
+        "single-page A4 PDF written to PDF_OUTPUT_LOCATION. Both settings "
+        "are read from the .env file in the current working directory."
+    )
+    parser.parse_args()
+
+
 def main() -> int:
     """Load configuration and generate the configured CV PDF."""
+    parse_arguments()
+
     try:
         working_directory = Path.cwd()
         load_environment(working_directory / ".env")

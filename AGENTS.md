@@ -81,7 +81,9 @@ installation guidance synchronized with the implementation.
 - Never stage or commit changes on your own initiative.
 - Do not discard, reset, or overwrite unrelated working-tree changes.
 - If branch creation is requested, branch from `master` and use
-  `issues/<issue-number>_<short_description>`.
+  `issues/<issue-number>-<short-description>`, with the description in
+  kebab-case (lowercase words separated by single hyphens, never
+  `snake_case`).
 
 ## Secrets
 

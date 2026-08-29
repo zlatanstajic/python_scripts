@@ -71,8 +71,9 @@ variables win. A missing `.env` is a hard error. There are no CLI options beyond
 - Runtime deps go in `pyproject.toml` *and* `requirements.txt`; dev deps in
   `pyproject.toml` *and* `requirements-dev.txt`. Dev tool versions are pinned exactly.
 - Behavior changes must update `README.md` and the relevant page in `docs/`.
-- Branch naming is enforced by convention: `issues/<number>_<short_description>` off
-  `master`. See `CONTRIBUTING.md`.
+- Branch naming is enforced by convention: `issues/<number>-<short-description>` off
+  `master`, with the description in kebab-case (lowercase, hyphen-separated, never
+  `snake_case`). See `CONTRIBUTING.md`.
 
 ## cv_generator specifics
 

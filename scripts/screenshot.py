@@ -13,13 +13,17 @@ the directory is created when absent.
 
 Each site is captured in a fresh Chromium context sized to a 1600x900 viewport
 at scale factor 1, and the visible viewport is written as
-``<hostname>.jpg``, overwriting the file from the previous run.
+``<hostname>.jpg``, overwriting the file from the previous run. GitHub Pages
+project sites are named after the repository instead of the shared user
+hostname, with underscores replaced by hyphens, so
+``https://username.github.io/my_project/`` is written as ``my-project.jpg``.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -33,6 +37,10 @@ DEVICE_SCALE_FACTOR = 1
 NAVIGATION_TIMEOUT_MS = 60000
 SETTLE_DELAY_MS = 500
 JPEG_QUALITY = 85
+
+GITHUB_PAGES_HOSTNAME_SUFFIX = ".github.io"
+# Path segment safe to use as a filename stem: no separators, no `.`/`..`.
+SAFE_FILENAME_STEM = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*")
 
 DISABLE_ANIMATIONS_CSS = """
 *,
@@ -116,10 +124,32 @@ def load_config() -> tuple[list[str], Path]:
 
 
 def hostname_to_filename(url: str) -> str:
-    """Return the `<hostname>.jpg` filename for a website URL."""
-    hostname = urlparse(url).hostname
+    """Return the `.jpg` filename for a website URL.
+
+    The hostname names the file, except on GitHub Pages project sites, where
+    every project shares one `<username>.github.io` hostname; those are named
+    after the first path segment (the repository) instead, with underscores
+    replaced by hyphens.
+
+    Args:
+        url: The website URL to derive a filename from.
+
+    Returns:
+        The filename to write the screenshot to.
+
+    Raises:
+        ValueError: If the URL carries no hostname.
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname
     if not hostname:
         raise ValueError(f"Invalid website URL: {url}")
+
+    if hostname.endswith(GITHUB_PAGES_HOSTNAME_SUFFIX):
+        segments = [segment for segment in parsed.path.split("/") if segment]
+        if segments and SAFE_FILENAME_STEM.fullmatch(segments[0]):
+            return f"{segments[0].replace('_', '-')}.jpg"
+
     return f"{hostname}.jpg"
 
 

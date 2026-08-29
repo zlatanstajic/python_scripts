@@ -15,9 +15,9 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 
 WIDTH, HEIGHT = 1200, 630
-BACKGROUND = (13, 17, 23)
-PANEL = (22, 27, 34)
-BORDER = (48, 54, 61)
+BACKGROUND = (15, 23, 42)
+PANEL = (31, 41, 55)
+BORDER = (62, 62, 58)
 PYTHON_BLUE = (55, 118, 171)
 PYTHON_YELLOW = (255, 212, 59)
 TEXT = (240, 246, 252)
@@ -120,7 +120,7 @@ def main():
     )
 
     tagline_font = load_font(36)
-    tagline = "Focused command-line utilities"
+    tagline = "Practical Python tools for documents and the web"
     tagline_bounds = draw.textbbox((0, 0), tagline, font=tagline_font)
     tagline_y = 500 - tagline_bounds[1]
     draw.text(

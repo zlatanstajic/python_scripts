@@ -55,6 +55,10 @@ Documentation = "https://github.com/zlatanstajic/python_scripts/tree/master/docs
 Repository = "https://github.com/zlatanstajic/python_scripts"
 Issues = "https://github.com/zlatanstajic/python_scripts/issues"
 
+[project.scripts]
+cv-generator = "scripts.cv_generator:main"
+website-screenshot = "scripts.screenshot:main"
+
 [tool.setuptools]
 packages = ["scripts"]
 

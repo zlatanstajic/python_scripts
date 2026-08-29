@@ -103,10 +103,17 @@ def test_load_config_falls_back_to_the_default_directory(
         ("https://example.com", "example.com.jpg"),
         ("https://www.example.com/", "www.example.com.jpg"),
         ("https://subdomain.example.com/page", "subdomain.example.com.jpg"),
+        ("https://zlatanstajic.github.io/shell-scripts/", "shell-scripts.jpg"),
+        ("https://zlatanstajic.github.io/shell-scripts", "shell-scripts.jpg"),
+        ("https://zlatanstajic.github.io/python_scripts/", "python-scripts.jpg"),
+        ("https://zlatanstajic.github.io/_leading/", "-leading.jpg"),
+        ("https://zlatanstajic.github.io/", "zlatanstajic.github.io.jpg"),
+        ("https://zlatanstajic.github.io", "zlatanstajic.github.io.jpg"),
+        ("https://zlatanstajic.github.io/../etc/", "zlatanstajic.github.io.jpg"),
     ],
 )
 def test_hostname_to_filename(url: str, expected: str) -> None:
-    """The filename is the hostname only, with a `.jpg` extension."""
+    """The hostname names the file, except GitHub Pages repository sites."""
     filename = screenshot.hostname_to_filename(url)
 
     assert filename == expected

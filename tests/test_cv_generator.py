@@ -1,5 +1,6 @@
 """Focused tests for the Markdown CV generator."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -122,3 +123,40 @@ def test_generate_pdf_renders_a_real_pdf(tmp_path: Path) -> None:
     cv_generator.generate_pdf(source, destination)
 
     assert destination.read_bytes().startswith(b"%PDF-")
+
+
+@pytest.mark.parametrize("flag", ["-h", "--help"])
+def test_parse_arguments_help_exits_zero_with_usage(
+    flag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Both help flags print a usage block naming both settings and exit 0."""
+    monkeypatch.setattr(sys, "argv", ["cv_generator.py", flag])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cv_generator.parse_arguments()
+
+    assert exit_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "usage:" in captured.out
+    assert "MARKDOWN_FILE_URL" in captured.out
+    assert "PDF_OUTPUT_LOCATION" in captured.out
+
+
+def test_parse_arguments_rejects_an_unknown_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unrecognised argument exits 2 with a usage message on stderr."""
+    monkeypatch.setattr(sys, "argv", ["cv_generator.py", "--bogus"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cv_generator.parse_arguments()
+
+    assert exit_info.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_parse_arguments_accepts_no_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare invocation parses cleanly and yields nothing to read."""
+    monkeypatch.setattr(sys, "argv", ["cv_generator.py"])
+
+    assert cv_generator.parse_arguments() is None

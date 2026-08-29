@@ -8,7 +8,7 @@ Generate from a local Markdown file
 
    MARKDOWN_FILE_URL="portfolio/cv.md" \
    PDF_OUTPUT_LOCATION="build/cv.pdf" \
-   python3 scripts/cv_generator.py
+   cv-generator
 
 Capture configured sites
 ------------------------
@@ -17,7 +17,7 @@ Capture configured sites
 
    SCREENSHOT_SITES="https://example.com,https://www.python.org" \
    SCREENSHOT_OUTPUT_DIR="./screenshots" \
-   python3 scripts/screenshot.py
+   website-screenshot
 
 Capture a different site
 ------------------------
@@ -26,4 +26,15 @@ Capture a different site
 
    SCREENSHOT_SITES="https://example.com" \
    SCREENSHOT_OUTPUT_DIR="/tmp/screenshots" \
-   python3 scripts/screenshot.py
+   website-screenshot
+
+Run without installing the commands
+-----------------------------------
+
+The file-path invocation stays supported for every example above:
+
+.. code-block:: bash
+
+   MARKDOWN_FILE_URL="portfolio/cv.md" \
+   PDF_OUTPUT_LOCATION="build/cv.pdf" \
+   python3 scripts/cv_generator.py
