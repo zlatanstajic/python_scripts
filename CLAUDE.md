@@ -47,15 +47,16 @@ python tools/gen-og-image.py                        # regenerate social preview 
 python setup/install-pre-commit.py                  # install the git pre-commit hook
 ```
 
-CI (`.github/workflows/ci.yml`) runs the lint set and pytest on Python 3.10/3.11/3.12;
-`deploy-docs.yml` publishes `docs/` to GitHub Pages on `master`.
+CI (`.github/workflows/ci.yml`) runs the documented checks on Python
+3.10/3.11/3.12; `deploy-docs.yml` builds Sphinx with warnings as errors and
+publishes `docs/` to GitHub Pages on relevant pushes to `master`.
 
 ## Configuration model
 
 Both scripts read configuration **only** from a `.env` file in the *current working
 directory* (`Path.cwd() / ".env"`), loaded with `override=False` so real environment
-variables win. A missing `.env` is a hard error. There are no CLI options beyond
-`-h`/`--help` on the screenshot script. Any new setting must be documented in
+variables win. A missing `.env` is a hard error. Neither CLI has options beyond
+`-h`/`--help`. Any new setting must be documented in
 `.env.example`. Never read or write the real `.env`.
 
 ## Conventions that matter here
@@ -94,7 +95,8 @@ variables win. A missing `.env` is a hard error. There are no CLI options beyond
 
 - One fresh browser context per site, reduced motion, animations disabled via injected
   CSS, `COOKIE_BANNER_SELECTORS` removed best-effort (failures ignored per selector).
-- Per-site failures are reported and counted, not fatal; the process exits 1 if any
-  site failed. Output is `<hostname>.jpg`, overwritten each run.
+- Per-site failures are reported and counted; the process exits 1 if any site
+  failed. Output is `<hostname>.jpg`, except GitHub Pages project sites use
+  `<hostname>-<project>.jpg`. Files are overwritten on later runs.
 - Tests fake Playwright rather than launching a browser — keep the seams
   (`capture_website`, `load_config`, `hostname_to_filename`) injectable.

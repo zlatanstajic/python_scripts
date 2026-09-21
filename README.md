@@ -27,6 +27,7 @@ The repository's former general automation utilities now live in the sibling
 - [Configuration](#configuration)
 - [Quality checks](#quality-checks)
 - [Contributing](#contributing)
+- [Security](#security)
 - [License](#license)
 
 ---
@@ -155,6 +156,10 @@ with warnings treated as errors using:
 python -m sphinx -W -b html docs docs/_build/html
 ```
 
+CI runs the Python checks on Python 3.10–3.12 for pushes to `master` and pull
+requests targeting it. A separate documentation workflow builds Sphinx with
+warnings as errors; see the [CI/CD guide](docs/cicd.rst) for details.
+
 The social-preview image is generated deterministically by a committed Pillow
 script and can be regenerated with:
 
@@ -170,6 +175,15 @@ python tools/gen-og-image.py  # requires Pillow
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to
 propose a change.
+
+[⬆ back to top](#table-of-contents)
+
+---
+
+## Security
+
+Please follow the [security policy](SECURITY.md) to report a vulnerability
+without publishing its details.
 
 [⬆ back to top](#table-of-contents)
 
