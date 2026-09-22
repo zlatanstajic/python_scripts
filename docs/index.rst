@@ -1,10 +1,11 @@
 Python Scripts
 ==============
 
-**Practical Python tools for documents and the web.**
+**Practical Python tools for documents, the web, and media libraries.**
 
-This project provides two Python command-line utilities: a Markdown-to-PDF CV
-generator and a Playwright-based website screenshot tool.
+This project provides three Python command-line utilities: a Markdown-to-PDF
+CV generator, a Playwright-based website screenshot tool, and a copy-only
+video library organizer.
 
 .. toctree::
    :maxdepth: 2
@@ -12,6 +13,7 @@ generator and a Playwright-based website screenshot tool.
 
    installation
    usage_guide
+   video_organizer
    examples
    api_reference
    contributing
@@ -25,10 +27,13 @@ Utilities
   CV from Markdown.
 * ``website-screenshot`` (:mod:`scripts.screenshot`) captures 1600x900
   viewport JPEGs of websites.
+* ``video-organizer`` (:mod:`scripts.video_organizer`) creates a verified,
+  date-and-location-organized copy of a video library.
 
-Installing the project puts both commands on the ``PATH``; see
-:doc:`installation`. Running ``python scripts/cv_generator.py`` and
-``python scripts/screenshot.py`` by file path remains supported.
+Installing the project puts all three commands on the ``PATH``; see
+:doc:`installation`. Running each module by file path remains supported:
+``python scripts/cv_generator.py``, ``python scripts/screenshot.py``, or
+``python scripts/video_organizer.py``.
 
 Indices
 -------

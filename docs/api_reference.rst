@@ -16,3 +16,11 @@ Website screenshots
    :members:
    :undoc-members:
    :show-inheritance:
+
+Video library organizer
+-----------------------
+
+.. automodule:: scripts.video_organizer
+   :members:
+   :undoc-members:
+   :show-inheritance:

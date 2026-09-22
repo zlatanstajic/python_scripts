@@ -10,17 +10,19 @@ from types import ModuleType
 
 import pytest
 
-from scripts import cv_generator, screenshot
+from scripts import cv_generator, screenshot, video_organizer
 
 DISTRIBUTION_NAME = "python-scripts"
 
 CONSOLE_SCRIPTS = {
     "cv-generator": cv_generator.main,
+    "video-organizer": video_organizer.main,
     "website-screenshot": screenshot.main,
 }
 
 EXPECTED_TARGETS = {
     "cv-generator": "scripts.cv_generator:main",
+    "video-organizer": "scripts.video_organizer:main",
     "website-screenshot": "scripts.screenshot:main",
 }
 
@@ -45,9 +47,9 @@ def _console_script(name: str) -> Path:
     pytest.skip(f"console script not installed: {name}")
 
 
-@pytest.mark.parametrize("module", [cv_generator, screenshot])
+@pytest.mark.parametrize("module", [cv_generator, screenshot, video_organizer])
 def test_module_exposes_a_callable_main(module: ModuleType) -> None:
-    """Both modules import cleanly and expose a callable `main`."""
+    """All command modules import cleanly and expose a callable `main`."""
     assert hasattr(module, "main")
     assert callable(module.main)
 
@@ -69,19 +71,29 @@ def test_project_scripts_targets_resolve_to_the_real_functions() -> None:
 
 
 def test_installed_console_script_metadata_matches_the_functions() -> None:
-    """Installed metadata declares both commands and loads the real functions."""
-    try:
-        distribution = importlib.metadata.distribution(DISTRIBUTION_NAME)
-    except importlib.metadata.PackageNotFoundError:
+    """Current installed metadata declares and loads all three commands."""
+    distributions = list(importlib.metadata.distributions(name=DISTRIBUTION_NAME))
+    if not distributions:
         pytest.skip(f"distribution not installed: {DISTRIBUTION_NAME}")
 
-    entry_points = {
-        entry_point.name: entry_point
-        for entry_point in distribution.entry_points
-        if entry_point.group == "console_scripts"
-    }
+    entry_point_sets = [
+        {
+            entry_point.name: entry_point
+            for entry_point in distribution.entry_points
+            if entry_point.group == "console_scripts"
+        }
+        for distribution in distributions
+    ]
+    entry_points = next(
+        (
+            candidates
+            for candidates in entry_point_sets
+            if set(candidates) == set(CONSOLE_SCRIPTS)
+        ),
+        None,
+    )
 
-    assert set(entry_points) == set(CONSOLE_SCRIPTS)
+    assert entry_points is not None
 
     for name, entry_point in entry_points.items():
         assert entry_point.value == EXPECTED_TARGETS[name]

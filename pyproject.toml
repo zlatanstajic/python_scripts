@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "python-scripts"
 version = "1.0.0"
-description = "Python utilities for CV generation and website screenshots"
+description = "Python utilities for documents, screenshots, and video organization"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -57,6 +57,7 @@ Issues = "https://github.com/zlatanstajic/python_scripts/issues"
 
 [project.scripts]
 cv-generator = "scripts.cv_generator:main"
+video-organizer = "scripts.video_organizer:main"
 website-screenshot = "scripts.screenshot:main"
 
 [tool.setuptools]

@@ -17,13 +17,14 @@ Development install
    python -m playwright install chromium
    cp .env.example .env
 
-The editable install puts two commands on the ``PATH`` of the activated
+The editable install puts three commands on the ``PATH`` of the activated
 environment:
 
 .. code-block:: bash
 
    which cv-generator
    which website-screenshot
+   which video-organizer
 
 Source edits under ``scripts/`` take effect immediately for those commands.
 Command names come from ``[project.scripts]`` in ``pyproject.toml`` and are
@@ -33,7 +34,7 @@ packaging metadata, so a new or renamed command appears only after re-running
 Optional user-level install with pipx
 -------------------------------------
 
-``pipx install .`` installs the same two commands into an isolated environment
+``pipx install .`` installs the same three commands into an isolated environment
 that never needs activating. It suits ``cv-generator``, which requires only the
 WeasyPrint system libraries.
 
@@ -49,3 +50,7 @@ System requirements
 WeasyPrint also requires platform libraries supplied by the operating system.
 Consult the WeasyPrint installation guide for the packages appropriate to your
 platform. Playwright's Chromium installation is required only for screenshots.
+
+The video organizer requires ``ffprobe``, normally installed as part of
+FFmpeg. ExifTool is optional but recommended for richer smartphone and
+camcorder metadata. Neither tool is installed by ``pip``.

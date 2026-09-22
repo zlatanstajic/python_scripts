@@ -1,8 +1,8 @@
 Usage Guide
 ===========
 
-Installing the project provides two commands, ``cv-generator`` and
-``website-screenshot``. Both read configuration from ``.env``. Copy
+Installing the project provides ``cv-generator``, ``website-screenshot``, and
+``video-organizer``. The first two read configuration from ``.env``. Copy
 ``.env.example`` to ``.env`` and adjust its retained settings.
 
 Where ``.env`` is read from
@@ -50,6 +50,24 @@ by hyphens, so ``https://username.github.io/my_project/`` is written as
 commands accept no options other than ``-h``/``--help``; configure sites and
 destinations only through ``.env``.
 
+Organize a video library
+------------------------
+
+The video organizer takes command-line paths rather than ``.env`` settings.
+Its workflow deliberately separates inspection, approval, and copying:
+
+.. code-block:: bash
+
+   video-organizer scan --input "/home/user/Videos" --verbose
+   video-organizer plan --input "/home/user/Videos" --output "/home/user/Organized" --verbose
+   video-organizer apply --plan "/home/user/Organized/organization-plan.json" --verbose
+
+The source directory is recursively scanned and remains unchanged throughout.
+The plan and report default to the output directory and are removed after a
+fully successful apply. They remain available when an entry fails.
+The optional ``--verbose`` flag shows detailed progress during every phase.
+See :doc:`video_organizer` for the complete safety and metadata behavior.
+
 Running the modules by file path
 --------------------------------
 
@@ -60,6 +78,7 @@ the installed commands:
 
    python3 scripts/cv_generator.py
    python3 scripts/screenshot.py
+   python3 scripts/video_organizer.py --help
 
 Development commands
 --------------------
