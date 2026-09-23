@@ -24,7 +24,7 @@ environment:
 
    which cv-generator
    which website-screenshot
-   which video-organizer
+   which media-organizer
 
 Source edits under ``scripts/`` take effect immediately for those commands.
 Command names come from ``[project.scripts]`` in ``pyproject.toml`` and are

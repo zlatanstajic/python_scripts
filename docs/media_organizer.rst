@@ -1,8 +1,7 @@
-Photo and Video Library Organizer
-=================================
+Media Library Organizer
+=======================
 
-The existing ``video-organizer`` command handles both photos and videos for
-backward compatibility. It recursively inspects one media directory and
+``media-organizer`` recursively inspects one media directory and
 creates a separate, organized copy. It never moves, renames, deletes,
 modifies, re-encodes, or writes metadata into source media. Input and output
 trees must not overlap.
@@ -14,7 +13,7 @@ First inspect the library without writing a plan or copying media files:
 
 .. code-block:: bash
 
-   video-organizer scan --input "/home/user/Media" --verbose
+   media-organizer scan --input "/home/user/Media" --verbose
 
 Then create reviewable JSON and Markdown manifests. By default they are saved
 as ``organization-plan.json`` and ``organization-plan.md`` inside the organized
@@ -22,7 +21,7 @@ output directory:
 
 .. code-block:: bash
 
-   video-organizer plan \
+   media-organizer plan \
      --input "/home/user/Media" \
      --output "/home/user/Organized" \
      --verbose
@@ -31,7 +30,7 @@ Review the reports, then apply the exact approved JSON plan:
 
 .. code-block:: bash
 
-   video-organizer apply \
+   media-organizer apply \
      --plan "/home/user/Organized/organization-plan.json" \
      --verbose
 
@@ -90,7 +89,7 @@ the OpenStreetMap Nominatim service for reverse geocoding, opt in explicitly:
 
 .. code-block:: bash
 
-   video-organizer plan \
+   media-organizer plan \
      --input "/home/user/Media" \
      --output "/home/user/Organized" \
      --allow-network-geocoding
@@ -165,8 +164,8 @@ Cache and copy safety
 ---------------------
 
 The default SQLite index is
-``$XDG_CACHE_HOME/video-organizer/metadata.sqlite3`` or, when that variable is
-unset, ``~/.cache/video-organizer/metadata.sqlite3``. ``--index`` selects a
+``$XDG_CACHE_HOME/media-organizer/metadata.sqlite3`` or, when that variable is
+unset, ``~/.cache/media-organizer/metadata.sqlite3``. ``--index`` selects a
 different path, but the index must remain outside the source tree. Cached
 metadata is reused only while absolute path, size, nanosecond modification
 time, device, and inode still match.

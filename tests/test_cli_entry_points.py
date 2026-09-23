@@ -10,19 +10,19 @@ from types import ModuleType
 
 import pytest
 
-from scripts import cv_generator, screenshot, video_organizer
+from scripts import cv_generator, media_organizer, screenshot
 
 DISTRIBUTION_NAME = "python-scripts"
 
 CONSOLE_SCRIPTS = {
     "cv-generator": cv_generator.main,
-    "video-organizer": video_organizer.main,
+    "media-organizer": media_organizer.main,
     "website-screenshot": screenshot.main,
 }
 
 EXPECTED_TARGETS = {
     "cv-generator": "scripts.cv_generator:main",
-    "video-organizer": "scripts.video_organizer:main",
+    "media-organizer": "scripts.media_organizer:main",
     "website-screenshot": "scripts.screenshot:main",
 }
 
@@ -47,7 +47,7 @@ def _console_script(name: str) -> Path:
     pytest.skip(f"console script not installed: {name}")
 
 
-@pytest.mark.parametrize("module", [cv_generator, screenshot, video_organizer])
+@pytest.mark.parametrize("module", [cv_generator, screenshot, media_organizer])
 def test_module_exposes_a_callable_main(module: ModuleType) -> None:
     """All command modules import cleanly and expose a callable `main`."""
     assert hasattr(module, "main")

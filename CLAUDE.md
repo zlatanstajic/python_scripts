@@ -8,7 +8,7 @@ Three independent Python CLI utilities, packaged as the `scripts` package:
 
 - `scripts/cv_generator.py` — Markdown CV → single-page A4 PDF (Markdown → HTML → WeasyPrint).
 - `scripts/screenshot.py` — 1600x900 Chromium/Playwright JPEG screenshots per configured site.
-- `scripts/video_organizer.py` — copy-only, manifest-driven video library organization.
+- `scripts/media_organizer.py` — copy-only, manifest-driven media organization.
 
 The scripts share no code beyond duplicated `load_environment` / `required_setting`
 helpers. General automation utilities that used to live here moved to the sibling
@@ -30,7 +30,7 @@ WeasyPrint needs its system libraries (pango/cairo) present for PDF generation.
 ```bash
 python scripts/cv_generator.py        # reads MARKDOWN_FILE_URL, PDF_OUTPUT_LOCATION
 python scripts/screenshot.py          # reads SCREENSHOT_SITES, SCREENSHOT_OUTPUT_DIR
-python scripts/video_organizer.py -h  # scan, plan, and apply subcommands
+python scripts/media_organizer.py -h  # scan, plan, and apply subcommands
 
 python -m pytest tests/                                   # full suite + coverage
 python -m pytest tests/test_screenshot.py::test_load_config_parses_sites_and_creates_output_directory
@@ -103,10 +103,10 @@ variables win. A missing `.env` is a hard error. Neither CLI has options beyond
 - Tests fake Playwright rather than launching a browser — keep the seams
   (`capture_website`, `load_config`, `hostname_to_filename`) injectable.
 
-## video organizer specifics
+## media organizer specifics
 
-- `ffprobe` validates video streams; `exiftool` enriches metadata when available.
-- The source and output trees must never overlap. Source videos are read-only.
+- `ffprobe` validates visual streams; `exiftool` enriches metadata when available.
+- The source and output trees must never overlap. Source media files are read-only.
 - `plan` binds entries to source size, nanosecond mtime, and SHA-256; `apply`
   copies via a temporary sibling, verifies the digest, then finalizes without
   overwriting.

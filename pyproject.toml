@@ -57,7 +57,7 @@ Issues = "https://github.com/zlatanstajic/python_scripts/issues"
 
 [project.scripts]
 cv-generator = "scripts.cv_generator:main"
-video-organizer = "scripts.video_organizer:main"
+media-organizer = "scripts.media_organizer:main"
 website-screenshot = "scripts.screenshot:main"
 
 [tool.setuptools]

@@ -220,7 +220,7 @@ PercentageCallback = Callable[[int], None]
 
 
 @dataclass
-class VideoMetadata:
+class MediaMetadata:
     """Metadata and provenance collected for one candidate media file."""
 
     path: str
@@ -300,7 +300,7 @@ class NominatimGeocoder:
         request = urllib.request.Request(
             f"{self.url}?{query}",
             headers={
-                "User-Agent": "python-scripts-video-organizer/1.0 "
+                "User-Agent": "python-scripts-media-organizer/1.0 "
                 "(https://github.com/zlatanstajic/python_scripts)",
                 "Accept-Language": "en",
             },
@@ -335,7 +335,7 @@ class MetadataIndex:
         self.connection = sqlite3.connect(self.path)
         self.connection.execute(
             """
-            CREATE TABLE IF NOT EXISTS videos (
+            CREATE TABLE IF NOT EXISTS media (
                 path TEXT PRIMARY KEY,
                 size INTEGER NOT NULL,
                 mtime_ns INTEGER NOT NULL,
@@ -371,11 +371,11 @@ class MetadataIndex:
         """Close the SQLite connection."""
         self.connection.close()
 
-    def get(self, path: Path) -> VideoMetadata | None:
+    def get(self, path: Path) -> MediaMetadata | None:
         """Return cached metadata when all relevant file identity fields match."""
         stat = path.stat()
         row = self.connection.execute(
-            "SELECT size, mtime_ns, device, inode, metadata FROM videos WHERE path = ?",
+            "SELECT size, mtime_ns, device, inode, metadata FROM media WHERE path = ?",
             (str(path),),
         ).fetchone()
         if row is None or row[:4] != (
@@ -385,15 +385,15 @@ class MetadataIndex:
             stat.st_ino,
         ):
             return None
-        return VideoMetadata(**json.loads(row[4]))
+        return MediaMetadata(**json.loads(row[4]))
 
-    def put(self, metadata: VideoMetadata) -> None:
+    def put(self, metadata: MediaMetadata) -> None:
         """Insert or replace cached metadata for a source file."""
         source = Path(metadata.path)
         stat = source.stat()
         self.connection.execute(
             """
-            INSERT OR REPLACE INTO videos
+            INSERT OR REPLACE INTO media
                 (path, size, mtime_ns, device, inode, metadata)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
@@ -451,7 +451,7 @@ class MetadataIndex:
 def default_index_path() -> Path:
     """Return a cache path outside a typical source media directory."""
     cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return cache_root / "video-organizer" / "metadata.sqlite3"
+    return cache_root / "media-organizer" / "metadata.sqlite3"
 
 
 def _first_text(values: Mapping[str, Any], keys: Iterable[str]) -> str | None:
@@ -493,7 +493,7 @@ def discover_media(source: Path, excluded: Sequence[Path] = ()) -> list[Path]:
         directories[:] = sorted(
             directory
             for directory in directories
-            if not directory.startswith(".video-organizer-")
+            if not directory.startswith(".media-organizer-")
             and not any(
                 _is_relative_to((root_path / directory).resolve(), excluded_path)
                 for excluded_path in excluded_paths
@@ -504,11 +504,6 @@ def discover_media(source: Path, excluded: Sequence[Path] = ()) -> list[Path]:
             if candidate.suffix.lower() in SUPPORTED_EXTENSIONS:
                 discovered.append(candidate)
     return discovered
-
-
-def discover_videos(source: Path, excluded: Sequence[Path] = ()) -> list[Path]:
-    """Return supported media through the legacy discovery function name."""
-    return discover_media(source, excluded)
 
 
 def _parse_timestamp(value: str) -> tuple[str, str | None] | None:
@@ -555,12 +550,12 @@ def _as_float(value: Any) -> float | None:
     return number if number == number and abs(number) != float("inf") else None
 
 
-def extract_metadata(path: Path) -> VideoMetadata:
+def extract_metadata(path: Path) -> MediaMetadata:
     """Validate media with FFprobe and combine FFprobe/ExifTool metadata."""
     path = path.resolve()
     media_type = "image" if path.suffix.lower() in IMAGE_EXTENSIONS else "video"
     stat = path.stat()
-    metadata = VideoMetadata(
+    metadata = MediaMetadata(
         path=str(path),
         original_filename=path.name,
         extension=path.suffix,
@@ -650,7 +645,7 @@ def _embedded_location_pair(values: Mapping[str, Any]) -> tuple[str, str] | None
     return None
 
 
-def _populate_metadata(metadata: VideoMetadata, values: Mapping[str, Any]) -> None:
+def _populate_metadata(metadata: MediaMetadata, values: Mapping[str, Any]) -> None:
     """Populate normalized fields from combined tool metadata."""
     for key in TIMESTAMP_KEYS:
         raw_timestamp = values.get(key)
@@ -717,7 +712,7 @@ def _normalize_timezone(value: str | None) -> str | None:
     return f"{match.group(1)}{hours:02d}:{minutes:02d}"
 
 
-def _apply_filesystem_modified_time(metadata: VideoMetadata, path: Path) -> None:
+def _apply_filesystem_modified_time(metadata: MediaMetadata, path: Path) -> None:
     """Use the source file modification time as its effective recording time."""
     stat = path.stat()
     modified = datetime.fromtimestamp(stat.st_mtime).astimezone()
@@ -749,7 +744,7 @@ def load_overrides(path: Path | None) -> dict[str, Any]:
 
 
 def classify_location(
-    metadata: VideoMetadata,
+    metadata: MediaMetadata,
     source: Path,
     geocoder: Geocoder,
     overrides: Mapping[str, Any],
@@ -824,10 +819,10 @@ def scan_library(
     overrides: Mapping[str, Any],
     excluded: Sequence[Path] = (),
     progress: ProgressCallback | None = None,
-) -> tuple[list[VideoMetadata], list[dict[str, str]]]:
+) -> tuple[list[MediaMetadata], list[dict[str, str]]]:
     """Discover media, reuse valid cache records, and classify each file."""
     source = source.expanduser().resolve()
-    videos: list[VideoMetadata] = []
+    media_files: list[MediaMetadata] = []
     skipped: list[dict[str, str]] = []
     _emit_progress(progress, f"Scanning recursively: {source}")
     candidates = discover_media(source, excluded)
@@ -854,9 +849,9 @@ def scan_library(
             skipped.append({"path": str(path), "reason": str(error)})
             _emit_progress(progress, f"{prefix} Skipped: {error}")
             continue
-        videos.append(metadata)
+        media_files.append(metadata)
         _emit_progress(progress, f"{prefix} Metadata ready")
-    return videos, skipped
+    return media_files, skipped
 
 
 def _emit_progress(progress: ProgressCallback | None, message: str) -> None:
@@ -915,7 +910,7 @@ def english_locality_name(value: str) -> str:
     return LOCALITY_ENGLISH_ALIASES.get(_english_alias_key(value), value)
 
 
-def _normalize_metadata_location(metadata: VideoMetadata) -> None:
+def _normalize_metadata_location(metadata: MediaMetadata) -> None:
     """Canonicalize classified country and locality values to known English names."""
     if metadata.country:
         metadata.country = english_country_name(metadata.country)
@@ -923,7 +918,7 @@ def _normalize_metadata_location(metadata: VideoMetadata) -> None:
         metadata.locality = english_locality_name(metadata.locality)
 
 
-def _timestamp_filename(metadata: VideoMetadata) -> str | None:
+def _timestamp_filename(metadata: MediaMetadata) -> str | None:
     """Return the sortable timestamp part of a filename when verified."""
     if not metadata.recording_timestamp:
         return None
@@ -991,7 +986,7 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
 def build_plan(
     source: Path,
     output: Path,
-    videos: Sequence[VideoMetadata],
+    media_files: Sequence[MediaMetadata],
     skipped: Sequence[Mapping[str, str]],
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
@@ -999,13 +994,13 @@ def build_plan(
     source, output = validate_separate_trees(source, output)
     used: set[Path] = set()
     entries: list[dict[str, Any]] = []
-    sorted_videos = sorted(videos, key=lambda item: item.path)
+    sorted_media = sorted(media_files, key=lambda item: item.path)
     has_classified_locations = any(
-        item.country and item.locality for item in sorted_videos
+        item.country and item.locality for item in sorted_media
     )
-    total = len(sorted_videos)
+    total = len(sorted_media)
     _emit_progress(progress, f"Building plan for {total} media file(s).")
-    for position, metadata in enumerate(sorted_videos, start=1):
+    for position, metadata in enumerate(sorted_media, start=1):
         prefix = f"[{position}/{total}]"
         country = english_country_name(metadata.country) if metadata.country else None
         locality = (
@@ -1349,7 +1344,7 @@ def _apply_entry(
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix=".video-organizer-", suffix=".part", dir=destination.parent
+        prefix=".media-organizer-", suffix=".part", dir=destination.parent
     )
     temporary = Path(temporary_name)
     try:
@@ -1500,7 +1495,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
 
 def _scan_from_arguments(
     arguments: argparse.Namespace, output: Path | None = None
-) -> tuple[list[VideoMetadata], list[dict[str, str]]]:
+) -> tuple[list[MediaMetadata], list[dict[str, str]]]:
     """Run a configured scan while managing its cache and geocoder."""
     source = arguments.input.expanduser().resolve()
     index_path = arguments.index.expanduser().resolve()
@@ -1533,20 +1528,20 @@ def main(arguments: Sequence[str] | None = None) -> int:
     args = parse_arguments(arguments)
     try:
         if args.command == "scan":
-            videos, skipped = _scan_from_arguments(args)
-            for video in videos:
+            media_files, skipped = _scan_from_arguments(args)
+            for media in media_files:
                 location = (
                     "/".join(
-                        value for value in (video.country, video.locality) if value
+                        value for value in (media.country, media.locality) if value
                     )
                     or "Unclassified"
                 )
-                print(f"[{video.media_type.upper()}] {video.path} -> {location}")
+                print(f"[{media.media_type.upper()}] {media.path} -> {location}")
             for item in skipped:
                 print(f"[SKIPPED] {item['path']}: {item['reason']}")
             if args.allow_network_geocoding:
                 print(NOMINATIM_ATTRIBUTION)
-            print(f"Finished: {len(videos)} files, {len(skipped)} skipped.")
+            print(f"Finished: {len(media_files)} files, {len(skipped)} skipped.")
             return 1 if skipped else 0
 
         if args.command == "plan":
@@ -1558,18 +1553,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     raise ValueError(
                         "Organization reports must be outside the input directory"
                     )
-            videos, skipped = _scan_from_arguments(args, output)
+            media_files, skipped = _scan_from_arguments(args, output)
             plan = build_plan(
                 source,
                 output,
-                videos,
+                media_files,
                 skipped,
                 _console_progress if args.verbose else None,
             )
             write_plan(plan, plan_file, report_file)
             print(f"Wrote {plan_file} and {report_file}.")
             print(
-                f"Planned: {len(videos)} files, {len(skipped)} skipped; "
+                f"Planned: {len(media_files)} files, {len(skipped)} skipped; "
                 "no files copied."
             )
             if args.allow_network_geocoding:

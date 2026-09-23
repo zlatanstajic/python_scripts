@@ -57,7 +57,7 @@ python -m playwright install chromium
 cp .env.example .env
 ```
 
-The install puts `cv-generator`, `website-screenshot`, and `video-organizer` on
+The install puts `cv-generator`, `website-screenshot`, and `media-organizer` on
 the `PATH` of the activated environment. Because the install is editable,
 edits under `scripts/` take effect immediately for those commands — no
 reinstall is required.
@@ -116,12 +116,12 @@ Running the modules by file path is still supported and behaves identically:
 ```bash
 python scripts/cv_generator.py
 python scripts/screenshot.py
-python scripts/video_organizer.py --help
+python scripts/media_organizer.py --help
 ```
 
-### Photo and video library organizer
+### Media library organizer
 
-The existing `video-organizer` command now handles both photos and videos. It
+The `media-organizer` command handles both photos and videos. It
 uses a reviewable three-step workflow and never moves, renames, deletes, edits,
 re-encodes, or writes metadata into source media:
 
@@ -129,12 +129,12 @@ Supported image formats are JPEG, PNG, HEIC, HEIF, WebP, TIFF, and AVIF;
 existing video-format support is unchanged.
 
 ```bash
-video-organizer scan --input "/home/user/Media" --verbose
-video-organizer plan \
+media-organizer scan --input "/home/user/Media" --verbose
+media-organizer plan \
   --input "/home/user/Media" \
   --output "/home/user/Organized" \
   --verbose
-video-organizer apply \
+media-organizer apply \
   --plan "/home/user/Organized/organization-plan.json" \
   --verbose
 ```
@@ -175,7 +175,7 @@ OpenStreetMap Nominatim reverse-geocoding service; responses are cached in the
 SQLite metadata index. Public-server requests are serialized and limited to
 one per second; use `--geocoder-url` for another compatible service. Review the
 [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/)
-before opting in. See the [media organizer guide](docs/video_organizer.rst) for
+before opting in. See the [media organizer guide](docs/media_organizer.rst) for
 metadata rules, overrides, cache behavior, and limitations.
 
 [⬆ back to top](#table-of-contents)

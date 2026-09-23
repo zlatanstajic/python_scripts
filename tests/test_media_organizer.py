@@ -1,4 +1,4 @@
-"""Tests for the copy-only photo and video library organizer."""
+"""Tests for the copy-only media library organizer."""
 
 import json
 import os
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import video_organizer
+from scripts import media_organizer
 
 
 class MappingGeocoder:
@@ -24,7 +24,7 @@ class MappingGeocoder:
 def metadata_for(path: Path, timestamp="2026-09-08T18:42:15+02:00"):
     """Build metadata from a synthetic media path."""
     stat = path.stat()
-    return video_organizer.VideoMetadata(
+    return media_organizer.MediaMetadata(
         path=str(path.resolve()),
         original_filename=path.name,
         extension=path.suffix,
@@ -34,7 +34,7 @@ def metadata_for(path: Path, timestamp="2026-09-08T18:42:15+02:00"):
         recording_timestamp=timestamp,
         media_type=(
             "image"
-            if path.suffix.lower() in video_organizer.IMAGE_EXTENSIONS
+            if path.suffix.lower() in media_organizer.IMAGE_EXTENSIONS
             else "video"
         ),
         recording_timezone="+02:00" if timestamp else None,
@@ -47,24 +47,24 @@ def test_discover_media_is_recursive_and_supports_expected_formats(tmp_path):
     nested = source / "2026" / "Sеptember"
     nested.mkdir(parents=True)
     expected = []
-    for index, extension in enumerate(sorted(video_organizer.SUPPORTED_EXTENSIONS)):
+    for index, extension in enumerate(sorted(media_organizer.SUPPORTED_EXTENSIONS)):
         path = nested / f"video {index}{extension.upper()}"
         path.write_bytes(b"video")
         expected.append(path.resolve())
     (nested / "notes.txt").write_text("not media", encoding="utf-8")
 
-    assert video_organizer.discover_media(source) == sorted(expected)
+    assert media_organizer.discover_media(source) == sorted(expected)
 
 
-def test_discover_videos_excludes_generated_directories(tmp_path):
+def test_discover_media_excludes_generated_directories(tmp_path):
     source = tmp_path / "source"
-    hidden = source / ".video-organizer-copy"
+    hidden = source / ".media-organizer-copy"
     hidden.mkdir(parents=True)
     (hidden / "partial.mp4").write_bytes(b"partial")
     kept = source / "kept.mp4"
     kept.write_bytes(b"kept")
 
-    assert video_organizer.discover_videos(source) == [kept.resolve()]
+    assert media_organizer.discover_media(source) == [kept.resolve()]
 
 
 def test_extract_metadata_combines_ffprobe_and_exiftool(monkeypatch, tmp_path):
@@ -94,12 +94,12 @@ def test_extract_metadata_combines_ffprobe_and_exiftool(monkeypatch, tmp_path):
             }
         ]
 
-    monkeypatch.setattr(video_organizer, "_run_json", fake_run)
-    result = video_organizer.extract_metadata(video)
+    monkeypatch.setattr(media_organizer, "_run_json", fake_run)
+    result = media_organizer.extract_metadata(video)
 
     modified = datetime.fromtimestamp(video.stat().st_mtime).astimezone()
     assert result.recording_timestamp == modified.isoformat(timespec="seconds")
-    assert result.recording_timezone == video_organizer._normalize_timezone(
+    assert result.recording_timezone == media_organizer._normalize_timezone(
         modified.strftime("%z")
     )
     assert result.timestamp_provenance == "filesystem:mtime"
@@ -135,8 +135,8 @@ def test_extract_image_metadata_with_ffprobe_and_exiftool(monkeypatch, tmp_path)
             }
         ]
 
-    monkeypatch.setattr(video_organizer, "_run_json", fake_run)
-    result = video_organizer.extract_metadata(image)
+    monkeypatch.setattr(media_organizer, "_run_json", fake_run)
+    result = media_organizer.extract_metadata(image)
 
     assert result.media_type == "image"
     assert result.duration is None
@@ -149,26 +149,26 @@ def test_extract_metadata_rejects_undecodable_image(monkeypatch, tmp_path):
     candidate = tmp_path / "invalid.jpg"
     candidate.write_bytes(b"not-image")
     monkeypatch.setattr(
-        video_organizer,
+        media_organizer,
         "_run_json",
         lambda _command: {"streams": [], "format": {}},
     )
 
     with pytest.raises(ValueError, match="no decodable image"):
-        video_organizer.extract_metadata(candidate)
+        media_organizer.extract_metadata(candidate)
 
 
 def test_extract_metadata_rejects_file_without_video_stream(monkeypatch, tmp_path):
     candidate = tmp_path / "invalid.mp4"
     candidate.write_bytes(b"not-video")
     monkeypatch.setattr(
-        video_organizer,
+        media_organizer,
         "_run_json",
         lambda _command: {"streams": [], "format": {}},
     )
 
     with pytest.raises(ValueError, match="no video stream"):
-        video_organizer.extract_metadata(candidate)
+        media_organizer.extract_metadata(candidate)
 
 
 def test_extract_metadata_reports_conflicting_embedded_locations(monkeypatch, tmp_path):
@@ -183,8 +183,8 @@ def test_extract_metadata_reports_conflicting_embedded_locations(monkeypatch, tm
             }
         return [{"Country": "Greece", "City": "Athens"}]
 
-    monkeypatch.setattr(video_organizer, "_run_json", fake_run)
-    result = video_organizer.extract_metadata(candidate)
+    monkeypatch.setattr(media_organizer, "_run_json", fake_run)
+    result = media_organizer.extract_metadata(candidate)
 
     assert result.country is None
     assert result.locality is None
@@ -203,8 +203,8 @@ def test_missing_exiftool_and_metadata_are_reported(monkeypatch, tmp_path):
             "format": {},
         }
 
-    monkeypatch.setattr(video_organizer, "_run_json", fake_run)
-    result = video_organizer.extract_metadata(candidate)
+    monkeypatch.setattr(media_organizer, "_run_json", fake_run)
+    result = media_organizer.extract_metadata(candidate)
 
     assert result.recording_timestamp is not None
     assert result.timestamp_provenance == "filesystem:mtime"
@@ -219,7 +219,7 @@ def test_quicktime_iso6709_coordinates_are_parsed(tmp_path):
     candidate.write_bytes(b"video")
     metadata = metadata_for(candidate)
 
-    video_organizer._populate_metadata(
+    media_organizer._populate_metadata(
         metadata,
         {"com.apple.quicktime.location.ISO6709": "+44.8178+020.4569+120.0/"},
     )
@@ -233,7 +233,7 @@ def test_standalone_recording_timezone_is_preserved(tmp_path):
     candidate.write_bytes(b"video")
     metadata = metadata_for(candidate, timestamp=None)
 
-    video_organizer._populate_metadata(
+    media_organizer._populate_metadata(
         metadata,
         {
             "DateTimeOriginal": "2026:09:08 18:42:15",
@@ -258,17 +258,17 @@ def test_gps_resolution_groups_landmarks_by_parent_locality(tmp_path):
     second_metadata.latitude, second_metadata.longitude = (44.2, 20.2)
     geocoder = MappingGeocoder(
         {
-            (44.1, 20.1): video_organizer.Location(
+            (44.1, 20.1): media_organizer.Location(
                 "Serbia", "Village A", "Village A river"
             ),
-            (44.2, 20.2): video_organizer.Location(
+            (44.2, 20.2): media_organizer.Location(
                 "Serbia", "Village A", "Village A forest"
             ),
         }
     )
 
     for metadata in (first_metadata, second_metadata):
-        video_organizer.classify_location(metadata, source, geocoder, {})
+        media_organizer.classify_location(metadata, source, geocoder, {})
 
     assert first_metadata.locality == second_metadata.locality == "Village A"
     assert first_metadata.detailed_place != second_metadata.detailed_place
@@ -280,8 +280,8 @@ def test_neighboring_localities_remain_separate(tmp_path):
     places = []
     geocoder = MappingGeocoder(
         {
-            (1.0, 2.0): video_organizer.Location("Serbia", "Village A"),
-            (1.1, 2.1): video_organizer.Location("Serbia", "Village B"),
+            (1.0, 2.0): media_organizer.Location("Serbia", "Village A"),
+            (1.1, 2.1): media_organizer.Location("Serbia", "Village B"),
         }
     )
     for index, coordinates in enumerate(((1.0, 2.0), (1.1, 2.1))):
@@ -289,7 +289,7 @@ def test_neighboring_localities_remain_separate(tmp_path):
         path.write_bytes(b"video")
         item = metadata_for(path)
         item.latitude, item.longitude = coordinates
-        video_organizer.classify_location(item, source, geocoder, {})
+        media_organizer.classify_location(item, source, geocoder, {})
         places.append(item.locality)
 
     assert places == ["Village A", "Village B"]
@@ -308,8 +308,8 @@ def test_conflicting_recognizable_locations_are_not_guessed(tmp_path):
         }
     }
 
-    video_organizer.classify_location(
-        metadata, source.parent, video_organizer.NullGeocoder(), overrides
+    media_organizer.classify_location(
+        metadata, source.parent, media_organizer.NullGeocoder(), overrides
     )
 
     assert metadata.locality is None
@@ -324,8 +324,8 @@ def test_user_file_override_classifies_an_unknown_video(tmp_path):
     metadata = metadata_for(path)
     overrides = {"files": {"clip.mp4": {"country": "Serbia", "locality": "Belgrade"}}}
 
-    video_organizer.classify_location(
-        metadata, source, video_organizer.NullGeocoder(), overrides
+    media_organizer.classify_location(
+        metadata, source, media_organizer.NullGeocoder(), overrides
     )
 
     assert (metadata.country, metadata.locality) == ("Serbia", "Belgrade")
@@ -341,7 +341,7 @@ def test_user_file_override_classifies_an_unknown_video(tmp_path):
     ],
 )
 def test_source_folder_title(folder_name, expected):
-    assert video_organizer.source_folder_title(Path(folder_name)) == expected
+    assert media_organizer.source_folder_title(Path(folder_name)) == expected
 
 
 def test_build_plan_handles_unknowns_unicode_and_collisions(tmp_path):
@@ -361,7 +361,7 @@ def test_build_plan_handles_unknowns_unicode_and_collisions(tmp_path):
         item.location_provenance = "gps:reverse-geocoded"
     unknown_metadata = metadata_for(unknown, timestamp=None)
 
-    plan = video_organizer.build_plan(
+    plan = media_organizer.build_plan(
         source,
         output,
         [first_metadata, second_metadata, unknown_metadata],
@@ -372,7 +372,7 @@ def test_build_plan_handles_unknowns_unicode_and_collisions(tmp_path):
     assert destinations[0].parent == output / "2026" / "Spain" / "Lloret-de-Mar"
     assert destinations[0].name == "2026-09-08_18-42-15_Lloret-de-Mar.mov"
     assert destinations[1].name == "2026-09-08_18-42-15_Lloret-de-Mar_002.mov"
-    unknown_hash = video_organizer.sha256_file(unknown)[:12]
+    unknown_hash = media_organizer.sha256_file(unknown)[:12]
     assert destinations[2] == (
         output / "Unclassified" / "Unknown-Year" / f"Undated_{unknown_hash}.mp4"
     )
@@ -387,7 +387,7 @@ def test_all_unknown_locations_use_source_folder_description_as_title(tmp_path):
     path = source_folder / "FHD0015.MOV"
     path.write_bytes(b"video")
     metadata = metadata_for(path, timestamp="2019-07-21T17:07:52+02:00")
-    plan = video_organizer.build_plan(source, output, [metadata], [])
+    plan = media_organizer.build_plan(source, output, [metadata], [])
 
     destination = Path(plan["entries"][0]["destination"])
     assert destination == output / "2019" / "2019-07-21_17-07-52_Jul_Lefkada.MOV"
@@ -402,7 +402,7 @@ def test_build_plan_includes_images_and_media_counts(tmp_path):
     image = source_folder / "IMG_1031.JPG"
     image.write_bytes(b"image")
     metadata = metadata_for(image, timestamp="2022-08-14T12:34:56+02:00")
-    plan = video_organizer.build_plan(source, output, [metadata], [])
+    plan = media_organizer.build_plan(source, output, [metadata], [])
 
     entry = plan["entries"][0]
     destination = Path(entry["destination"])
@@ -427,7 +427,7 @@ def test_unknown_location_stays_unclassified_in_mixed_library(tmp_path):
     located.country = "Serbia"
     located.locality = "Belgrade"
 
-    plan = video_organizer.build_plan(
+    plan = media_organizer.build_plan(
         source,
         output,
         [located, metadata_for(unknown_path)],
@@ -453,7 +453,7 @@ def test_cyrillic_locations_are_transliterated_to_ascii(tmp_path):
     metadata.country = "Србија"
     metadata.locality = "Београд"
 
-    plan = video_organizer.build_plan(source, output, [metadata], [])
+    plan = media_organizer.build_plan(source, output, [metadata], [])
 
     destination = Path(plan["entries"][0]["destination"])
     assert destination == output / "2026" / "Serbia" / "Belgrade" / (
@@ -472,7 +472,7 @@ def test_unsupported_location_script_uses_ascii_fallback(tmp_path):
     metadata.country = "日本"
     metadata.locality = "東京"
 
-    plan = video_organizer.build_plan(source, output, [metadata], [])
+    plan = media_organizer.build_plan(source, output, [metadata], [])
 
     destination = Path(plan["entries"][0]["destination"])
     assert destination == output / "2026" / "Unknown-Country" / (
@@ -491,7 +491,7 @@ def test_unsupported_location_script_uses_ascii_fallback(tmp_path):
     ],
 )
 def test_known_country_names_are_canonicalized_to_english(source_name, english_name):
-    assert video_organizer.english_country_name(source_name) == english_name
+    assert media_organizer.english_country_name(source_name) == english_name
 
 
 @pytest.mark.parametrize(
@@ -507,7 +507,7 @@ def test_source_destination_overlap_is_rejected(tmp_path, source_name, output_na
     source.mkdir(parents=True)
 
     with pytest.raises(ValueError, match="must not overlap"):
-        video_organizer.validate_separate_trees(source, tmp_path / output_name)
+        media_organizer.validate_separate_trees(source, tmp_path / output_name)
 
 
 def test_load_plan_accepts_legacy_video_schema(tmp_path):
@@ -523,7 +523,7 @@ def test_load_plan_accepts_legacy_video_schema(tmp_path):
     }
     plan_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    assert video_organizer.load_plan(plan_path)["schema_version"] == 1
+    assert media_organizer.load_plan(plan_path)["schema_version"] == 1
 
 
 def test_metadata_index_reuses_and_invalidates_records(tmp_path):
@@ -532,7 +532,7 @@ def test_metadata_index_reuses_and_invalidates_records(tmp_path):
     metadata = metadata_for(video)
     index_path = tmp_path / "cache" / "index.sqlite3"
 
-    with video_organizer.MetadataIndex(index_path) as index:
+    with media_organizer.MetadataIndex(index_path) as index:
         index.put(metadata)
         assert index.get(video) == metadata
         video.write_bytes(b"changed content")
@@ -561,9 +561,9 @@ def test_metadata_index_invalidates_old_non_english_geocodes(tmp_path):
     connection.commit()
     connection.close()
 
-    with video_organizer.MetadataIndex(index_path) as index:
+    with media_organizer.MetadataIndex(index_path) as index:
         assert index.get_geocode(40.4, -3.7) is None
-        location = video_organizer.Location("Spain", "Madrid", "Madrid, Spain")
+        location = media_organizer.Location("Spain", "Madrid", "Madrid, Spain")
         index.put_geocode(40.4, -3.7, location)
         assert index.get_geocode(40.4, -3.7) == location
 
@@ -573,7 +573,7 @@ def test_write_plan_produces_json_and_markdown_reports(tmp_path):
     source.mkdir()
     video = source / "clip.mp4"
     video.write_bytes(b"video")
-    plan = video_organizer.build_plan(
+    plan = media_organizer.build_plan(
         source,
         tmp_path / "output",
         [metadata_for(video)],
@@ -582,7 +582,7 @@ def test_write_plan_produces_json_and_markdown_reports(tmp_path):
     json_path = tmp_path / "organization-plan.json"
     markdown_path = tmp_path / "organization-plan.md"
 
-    video_organizer.write_plan(plan, json_path, markdown_path)
+    media_organizer.write_plan(plan, json_path, markdown_path)
 
     written_plan = json.loads(json_path.read_text(encoding="utf-8"))
     assert written_plan["summary"]["skipped"] == 1
@@ -606,13 +606,13 @@ def test_apply_copies_verifies_is_idempotent_and_preserves_source(tmp_path):
     original = b"original video bytes"
     video.write_bytes(original)
     stat_before = video.stat()
-    plan = video_organizer.build_plan(source, output, [metadata_for(video)], [])
+    plan = media_organizer.build_plan(source, output, [metadata_for(video)], [])
     plan_path = tmp_path / "plan.json"
     report_path = tmp_path / "plan.md"
-    video_organizer.write_plan(plan, plan_path, report_path)
+    media_organizer.write_plan(plan, plan_path, report_path)
 
     progress = []
-    assert video_organizer.apply_plan(plan_path, progress.append) == (1, 0, 0)
+    assert media_organizer.apply_plan(plan_path, progress.append) == (1, 0, 0)
     destination = Path(plan["entries"][0]["destination"])
     assert destination.read_bytes() == original
     assert video.read_bytes() == original
@@ -622,11 +622,11 @@ def test_apply_copies_verifies_is_idempotent_and_preserves_source(tmp_path):
     assert any("Copy: 100%" in message for message in progress)
     assert progress[-1] == "All entries succeeded; removing plan artifacts"
 
-    repeated_plan = video_organizer.build_plan(
+    repeated_plan = media_organizer.build_plan(
         source, output, [metadata_for(video)], []
     )
-    video_organizer.write_plan(repeated_plan, plan_path, report_path)
-    assert video_organizer.apply_plan(plan_path) == (0, 1, 0)
+    media_organizer.write_plan(repeated_plan, plan_path, report_path)
+    assert media_organizer.apply_plan(plan_path) == (0, 1, 0)
     assert not plan_path.exists()
     assert not report_path.exists()
 
@@ -637,22 +637,22 @@ def test_apply_refuses_changed_source_and_existing_conflict(tmp_path):
     source.mkdir()
     video = source / "clip.mp4"
     video.write_bytes(b"original")
-    plan = video_organizer.build_plan(source, output, [metadata_for(video)], [])
+    plan = media_organizer.build_plan(source, output, [metadata_for(video)], [])
     plan_path = tmp_path / "plan.json"
     report_path = tmp_path / "plan.md"
-    video_organizer.write_plan(plan, plan_path, report_path)
+    media_organizer.write_plan(plan, plan_path, report_path)
     destination = Path(plan["entries"][0]["destination"])
     destination.parent.mkdir(parents=True)
     destination.write_bytes(b"conflict")
 
-    assert video_organizer.apply_plan(plan_path) == (0, 0, 1)
+    assert media_organizer.apply_plan(plan_path) == (0, 0, 1)
     assert destination.read_bytes() == b"conflict"
     assert plan_path.exists()
     assert report_path.exists()
 
     destination.unlink()
     video.write_bytes(b"changed")
-    assert video_organizer.apply_plan(plan_path) == (0, 0, 1)
+    assert media_organizer.apply_plan(plan_path) == (0, 0, 1)
     assert not destination.exists()
 
 
@@ -662,20 +662,20 @@ def test_interrupted_copy_removes_partial_file(monkeypatch, tmp_path):
     source.mkdir()
     video = source / "clip.mp4"
     video.write_bytes(b"original")
-    plan = video_organizer.build_plan(source, output, [metadata_for(video)], [])
+    plan = media_organizer.build_plan(source, output, [metadata_for(video)], [])
     entry = plan["entries"][0]
 
     def interrupt(_input, output_handle, _total, _progress=None):
         output_handle.write(b"partial")
         raise OSError("interrupted")
 
-    monkeypatch.setattr(video_organizer, "_copy_with_progress", interrupt)
+    monkeypatch.setattr(media_organizer, "_copy_with_progress", interrupt)
     with pytest.raises(OSError, match="interrupted"):
-        video_organizer._apply_entry(entry, source.resolve(), output.resolve())
+        media_organizer._apply_entry(entry, source.resolve(), output.resolve())
 
     destination = Path(entry["destination"])
     assert not destination.exists()
-    assert list(destination.parent.glob(".video-organizer-*.part")) == []
+    assert list(destination.parent.glob(".media-organizer-*.part")) == []
 
 
 def test_apply_rejects_manifest_path_traversal(tmp_path):
@@ -684,12 +684,12 @@ def test_apply_rejects_manifest_path_traversal(tmp_path):
     source.mkdir()
     video = source / "clip.mp4"
     video.write_bytes(b"video")
-    plan = video_organizer.build_plan(source, output, [metadata_for(video)], [])
+    plan = media_organizer.build_plan(source, output, [metadata_for(video)], [])
     plan["entries"][0]["destination"] = str(tmp_path / "escaped.mp4")
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
 
-    assert video_organizer.apply_plan(plan_path) == (0, 0, 1)
+    assert media_organizer.apply_plan(plan_path) == (0, 0, 1)
     assert not (tmp_path / "escaped.mp4").exists()
 
 
@@ -699,15 +699,15 @@ def test_scan_uses_cached_metadata_without_reextracting(monkeypatch, tmp_path):
     video = source / "clip.mp4"
     video.write_bytes(b"video")
     index_path = tmp_path / "index.sqlite3"
-    with video_organizer.MetadataIndex(index_path) as index:
+    with media_organizer.MetadataIndex(index_path) as index:
         index.put(metadata_for(video))
         monkeypatch.setattr(
-            video_organizer,
+            media_organizer,
             "extract_metadata",
             lambda _path: pytest.fail("metadata should have come from cache"),
         )
-        videos, skipped = video_organizer.scan_library(
-            source, index, video_organizer.NullGeocoder(), {}
+        videos, skipped = media_organizer.scan_library(
+            source, index, media_organizer.NullGeocoder(), {}
         )
 
     assert len(videos) == 1
@@ -725,12 +725,12 @@ def test_main_scan_reports_invalid_candidate_without_traceback(
     (source / "bad.mp4").write_bytes(b"bad")
     index = tmp_path / "index.sqlite3"
     monkeypatch.setattr(
-        video_organizer,
+        media_organizer,
         "extract_metadata",
         lambda _path: (_ for _ in ()).throw(ValueError("invalid video")),
     )
 
-    result = video_organizer.main(
+    result = media_organizer.main(
         [
             "scan",
             "--input",
@@ -752,7 +752,7 @@ def test_index_inside_source_is_rejected(tmp_path, capsys):
     source = tmp_path / "source"
     source.mkdir()
 
-    result = video_organizer.main(
+    result = media_organizer.main(
         [
             "scan",
             "--input",
@@ -770,7 +770,7 @@ def test_plan_reports_inside_source_are_rejected(tmp_path, capsys):
     source = tmp_path / "source"
     source.mkdir()
 
-    result = video_organizer.main(
+    result = media_organizer.main(
         [
             "plan",
             "--input",
@@ -794,12 +794,12 @@ def test_main_plan_defaults_reports_to_output(monkeypatch, tmp_path, capsys):
     output = tmp_path / "organized"
     source.mkdir()
     monkeypatch.setattr(
-        video_organizer,
+        media_organizer,
         "_scan_from_arguments",
         lambda _arguments, _output: ([], []),
     )
 
-    result = video_organizer.main(
+    result = media_organizer.main(
         [
             "plan",
             "--input",
@@ -824,12 +824,12 @@ def test_apply_rejects_mutable_plan_inside_source(tmp_path):
     source.mkdir()
     video = source / "clip.mp4"
     video.write_bytes(b"video")
-    plan = video_organizer.build_plan(source, output, [metadata_for(video)], [])
+    plan = media_organizer.build_plan(source, output, [metadata_for(video)], [])
     plan_path = source / "plan.json"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
 
     with pytest.raises(ValueError, match="plan file must be outside"):
-        video_organizer.apply_plan(plan_path)
+        media_organizer.apply_plan(plan_path)
 
     assert not output.exists()
 
@@ -842,14 +842,14 @@ def test_apply_continues_after_one_entry_fails(tmp_path):
     good = source / "good.mp4"
     bad.write_bytes(b"bad")
     good.write_bytes(b"good")
-    plan = video_organizer.build_plan(
+    plan = media_organizer.build_plan(
         source, output, [metadata_for(bad), metadata_for(good)], []
     )
     bad.write_bytes(b"changed")
     plan_path = tmp_path / "plan.json"
-    video_organizer.write_plan(plan, plan_path, tmp_path / "plan.md")
+    media_organizer.write_plan(plan, plan_path, tmp_path / "plan.md")
 
-    assert video_organizer.apply_plan(plan_path) == (1, 0, 1)
+    assert media_organizer.apply_plan(plan_path) == (1, 0, 1)
     statuses = {
         entry["original_filename"]: entry["status"]
         for entry in json.loads(plan_path.read_text(encoding="utf-8"))["entries"]
@@ -858,15 +858,15 @@ def test_apply_continues_after_one_entry_fails(tmp_path):
 
 
 def test_parse_arguments_requires_one_input_directory():
-    args = video_organizer.parse_arguments(["scan", "--input", "/videos", "--verbose"])
+    args = media_organizer.parse_arguments(["scan", "--input", "/videos", "--verbose"])
     assert args.input == Path("/videos")
     assert args.verbose is True
-    apply_args = video_organizer.parse_arguments(
+    apply_args = media_organizer.parse_arguments(
         ["apply", "--plan", "/organized/organization-plan.json", "--verbose"]
     )
     assert apply_args.verbose is True
     with pytest.raises(SystemExit):
-        video_organizer.parse_arguments(["scan"])
+        media_organizer.parse_arguments(["scan"])
 
 
 def test_source_permissions_and_content_are_not_modified(tmp_path):
@@ -877,11 +877,11 @@ def test_source_permissions_and_content_are_not_modified(tmp_path):
     video.write_bytes(b"video")
     os.chmod(video, 0o640)
     before = video.stat()
-    plan = video_organizer.build_plan(source, output, [metadata_for(video)], [])
+    plan = media_organizer.build_plan(source, output, [metadata_for(video)], [])
     plan_path = tmp_path / "plan.json"
-    video_organizer.write_plan(plan, plan_path, tmp_path / "plan.md")
+    media_organizer.write_plan(plan, plan_path, tmp_path / "plan.md")
 
-    video_organizer.apply_plan(plan_path)
+    media_organizer.apply_plan(plan_path)
 
     after = video.stat()
     assert after.st_mode == before.st_mode

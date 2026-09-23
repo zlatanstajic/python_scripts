@@ -17,10 +17,10 @@ Website screenshots
    :undoc-members:
    :show-inheritance:
 
-Video library organizer
+Media library organizer
 -----------------------
 
-.. automodule:: scripts.video_organizer
+.. automodule:: scripts.media_organizer
    :members:
    :undoc-members:
    :show-inheritance:
