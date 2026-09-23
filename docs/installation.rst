@@ -51,6 +51,6 @@ WeasyPrint also requires platform libraries supplied by the operating system.
 Consult the WeasyPrint installation guide for the packages appropriate to your
 platform. Playwright's Chromium installation is required only for screenshots.
 
-The video organizer requires ``ffprobe``, normally installed as part of
-FFmpeg. ExifTool is optional but recommended for richer smartphone and
-camcorder metadata. Neither tool is installed by ``pip``.
+The media organizer requires ``ffprobe``, normally installed as part of
+FFmpeg. ExifTool is optional but recommended for richer photo, smartphone,
+and camcorder metadata. Neither tool is installed by ``pip``.

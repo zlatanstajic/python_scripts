@@ -8,7 +8,7 @@
 
 > **Practical Python tools for documents, the web, and media libraries.**
 > Three focused command-line utilities: render a single-page PDF CV, capture
-> website screenshots, and build a verified organized copy of a video library.
+> website screenshots, and build a verified organized copy of a media library.
 
 📖 **Browse the docs:**
 [zlatanstajic.github.io/python_scripts](https://zlatanstajic.github.io/python_scripts/)
@@ -37,8 +37,8 @@ The repository's former general automation utilities now live in the sibling
 - Python 3.10 or newer
 - WeasyPrint system libraries for PDF generation
 - A Playwright Chromium browser for screenshots
-- FFprobe (from FFmpeg) for video validation and metadata inspection
-- Optional: ExifTool for richer phone and camcorder video metadata
+- FFprobe (from FFmpeg) for media validation and metadata inspection
+- Optional: ExifTool for richer photo, phone, and camcorder metadata
 
 [⬆ back to top](#table-of-contents)
 
@@ -119,15 +119,19 @@ python scripts/screenshot.py
 python scripts/video_organizer.py --help
 ```
 
-### Video library organizer
+### Photo and video library organizer
 
-The organizer uses a reviewable three-step workflow and never moves, renames,
-deletes, edits, or re-encodes source videos:
+The existing `video-organizer` command now handles both photos and videos. It
+uses a reviewable three-step workflow and never moves, renames, deletes, edits,
+re-encodes, or writes metadata into source media:
+
+Supported image formats are JPEG, PNG, HEIC, HEIF, WebP, TIFF, and AVIF;
+existing video-format support is unchanged.
 
 ```bash
-video-organizer scan --input "/home/user/Videos" --verbose
+video-organizer scan --input "/home/user/Media" --verbose
 video-organizer plan \
-  --input "/home/user/Videos" \
+  --input "/home/user/Media" \
   --output "/home/user/Organized" \
   --verbose
 video-organizer apply \
@@ -146,10 +150,13 @@ files. Source and destination trees may not overlap.
 Location path components are transliterated to ASCII and use only Latin
 letters, digits, and hyphen separators. Known localized location names are
 canonicalized to English first (for example, `España` becomes `Spain` and
-`Београд` becomes `Belgrade`). Generated destination filenames never reuse
-source filenames: unknown locations use `Unclassified` and undated videos use
-a deterministic content-hash name. Original names remain available in the
-plan reports for traceability.
+`Београд` becomes `Belgrade`). If no media file has a classified location,
+location directories are omitted and each file's containing-folder
+description is used in generated filenames. A leading `YYYY-MM - ` folder
+prefix is omitted, and words are joined with underscores. In a mixed library,
+unknown locations use `Unclassified`. Generated destination filenames never
+reuse source filenames, and undated files use a deterministic content-hash
+name. Original names remain available in the plan reports for traceability.
 
 Year grouping and generated timestamps use the source file's filesystem
 modification time. Reports identify this explicitly with the
@@ -159,14 +166,16 @@ modification time. Reports identify this explicitly with the
 discovery, cache and metadata activity, classification, per-file planning,
 hashing and copying percentages, verification, status persistence, and cleanup.
 
-FFprobe is required. ExifTool is used when installed and otherwise produces a
-warning. Embedded GPS coordinates stay local by default. Passing
+FFprobe is required to validate supported photo and video formats. ExifTool is
+used when installed for richer EXIF, GPS, title, and camera metadata and
+otherwise produces a warning. Embedded GPS coordinates stay local by default.
+Passing
 `--allow-network-geocoding` explicitly permits coordinates to be sent to the
 OpenStreetMap Nominatim reverse-geocoding service; responses are cached in the
 SQLite metadata index. Public-server requests are serialized and limited to
 one per second; use `--geocoder-url` for another compatible service. Review the
 [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/)
-before opting in. See the [video organizer guide](docs/video_organizer.rst) for
+before opting in. See the [media organizer guide](docs/video_organizer.rst) for
 metadata rules, overrides, cache behavior, and limitations.
 
 [⬆ back to top](#table-of-contents)

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "python-scripts"
 version = "1.0.0"
-description = "Python utilities for documents, screenshots, and video organization"
+description = "Python utilities for documents, screenshots, and media organization"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

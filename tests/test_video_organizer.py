@@ -1,4 +1,4 @@
-"""Tests for the copy-only video library organizer."""
+"""Tests for the copy-only photo and video library organizer."""
 
 import json
 import os
@@ -22,7 +22,7 @@ class MappingGeocoder:
 
 
 def metadata_for(path: Path, timestamp="2026-09-08T18:42:15+02:00"):
-    """Build metadata from a synthetic video path."""
+    """Build metadata from a synthetic media path."""
     stat = path.stat()
     return video_organizer.VideoMetadata(
         path=str(path.resolve()),
@@ -32,13 +32,18 @@ def metadata_for(path: Path, timestamp="2026-09-08T18:42:15+02:00"):
         file_size=stat.st_size,
         mtime_ns=stat.st_mtime_ns,
         recording_timestamp=timestamp,
+        media_type=(
+            "image"
+            if path.suffix.lower() in video_organizer.IMAGE_EXTENSIONS
+            else "video"
+        ),
         recording_timezone="+02:00" if timestamp else None,
         timestamp_provenance="embedded:creation_time" if timestamp else None,
     )
 
 
-def test_discover_videos_is_recursive_and_supports_expected_formats(tmp_path):
-    source = tmp_path / "Videos"
+def test_discover_media_is_recursive_and_supports_expected_formats(tmp_path):
+    source = tmp_path / "Media"
     nested = source / "2026" / "Sеptember"
     nested.mkdir(parents=True)
     expected = []
@@ -46,9 +51,9 @@ def test_discover_videos_is_recursive_and_supports_expected_formats(tmp_path):
         path = nested / f"video {index}{extension.upper()}"
         path.write_bytes(b"video")
         expected.append(path.resolve())
-    (nested / "notes.txt").write_text("not a video", encoding="utf-8")
+    (nested / "notes.txt").write_text("not media", encoding="utf-8")
 
-    assert video_organizer.discover_videos(source) == sorted(expected)
+    assert video_organizer.discover_media(source) == sorted(expected)
 
 
 def test_discover_videos_excludes_generated_directories(tmp_path):
@@ -102,6 +107,55 @@ def test_extract_metadata_combines_ffprobe_and_exiftool(monkeypatch, tmp_path):
     assert (result.width, result.height, result.duration) == (1920, 1080, 4.25)
     assert result.camera == "Example Camera"
     assert result.title == "Old town"
+
+
+def test_extract_image_metadata_with_ffprobe_and_exiftool(monkeypatch, tmp_path):
+    image = tmp_path / "holiday.JPG"
+    image.write_bytes(b"image-data")
+
+    def fake_run(command):
+        if command[0] == "ffprobe":
+            return {
+                "streams": [
+                    {
+                        "codec_type": "video",
+                    }
+                ],
+                "format": {},
+            }
+        return [
+            {
+                "DateTimeOriginal": "2022:08:14 12:34:56+02:00",
+                "GPSLatitude": 36.32,
+                "GPSLongitude": 28.09,
+                "Make": "Example",
+                "Model": "Phone",
+                "ImageWidth": 4032,
+                "ImageHeight": 3024,
+            }
+        ]
+
+    monkeypatch.setattr(video_organizer, "_run_json", fake_run)
+    result = video_organizer.extract_metadata(image)
+
+    assert result.media_type == "image"
+    assert result.duration is None
+    assert (result.width, result.height) == (4032, 3024)
+    assert (result.latitude, result.longitude) == (36.32, 28.09)
+    assert result.camera == "Example Phone"
+
+
+def test_extract_metadata_rejects_undecodable_image(monkeypatch, tmp_path):
+    candidate = tmp_path / "invalid.jpg"
+    candidate.write_bytes(b"not-image")
+    monkeypatch.setattr(
+        video_organizer,
+        "_run_json",
+        lambda _command: {"streams": [], "format": {}},
+    )
+
+    with pytest.raises(ValueError, match="no decodable image"):
+        video_organizer.extract_metadata(candidate)
 
 
 def test_extract_metadata_rejects_file_without_video_stream(monkeypatch, tmp_path):
@@ -278,6 +332,18 @@ def test_user_file_override_classifies_an_unknown_video(tmp_path):
     assert metadata.location_provenance == "user-override"
 
 
+@pytest.mark.parametrize(
+    "folder_name, expected",
+    [
+        ("Family videos", "Family_videos"),
+        ("2021-06 - Videos description", "Videos_description"),
+        ("2022-08 - Traganou Beach on Rhodes", "Traganou_Beach_on_Rhodes"),
+    ],
+)
+def test_source_folder_title(folder_name, expected):
+    assert video_organizer.source_folder_title(Path(folder_name)) == expected
+
+
 def test_build_plan_handles_unknowns_unicode_and_collisions(tmp_path):
     source = tmp_path / "source"
     output = tmp_path / "organized"
@@ -313,19 +379,68 @@ def test_build_plan_handles_unknowns_unicode_and_collisions(tmp_path):
     assert "uncertain" not in destinations[2].name
 
 
-def test_known_date_unknown_location_does_not_use_original_stem(tmp_path):
+def test_all_unknown_locations_use_source_folder_description_as_title(tmp_path):
+    source = tmp_path / "Camera" / "Stark" / "2019"
+    source_folder = source / "2019-07 - Jul - Lefkada"
+    output = tmp_path / "Sorted" / "Stark"
+    source_folder.mkdir(parents=True)
+    path = source_folder / "FHD0015.MOV"
+    path.write_bytes(b"video")
+    metadata = metadata_for(path, timestamp="2019-07-21T17:07:52+02:00")
+    plan = video_organizer.build_plan(source, output, [metadata], [])
+
+    destination = Path(plan["entries"][0]["destination"])
+    assert destination == output / "2019" / "2019-07-21_17-07-52_Jul_Lefkada.MOV"
+    assert "FHD0015" not in destination.name
+
+
+def test_build_plan_includes_images_and_media_counts(tmp_path):
+    source = tmp_path / "Photos"
+    source_folder = source / "2022-08 - Traganou Beach on Rhodes"
+    output = tmp_path / "Sorted"
+    source_folder.mkdir(parents=True)
+    image = source_folder / "IMG_1031.JPG"
+    image.write_bytes(b"image")
+    metadata = metadata_for(image, timestamp="2022-08-14T12:34:56+02:00")
+    plan = video_organizer.build_plan(source, output, [metadata], [])
+
+    entry = plan["entries"][0]
+    destination = Path(entry["destination"])
+    assert destination == output / "2022" / (
+        "2022-08-14_12-34-56_Traganou_Beach_on_Rhodes.JPG"
+    )
+    assert entry["media_type"] == "image"
+    assert plan["summary"]["total_files"] == 1
+    assert plan["summary"]["images"] == 1
+    assert plan["summary"]["videos"] == 0
+
+
+def test_unknown_location_stays_unclassified_in_mixed_library(tmp_path):
     source = tmp_path / "source"
     output = tmp_path / "output"
     source.mkdir()
-    path = source / "IMG 1031.mov"
-    path.write_bytes(b"video")
-    plan = video_organizer.build_plan(source, output, [metadata_for(path)], [])
+    located_path = source / "located.mov"
+    unknown_path = source / "unknown.mov"
+    located_path.write_bytes(b"located")
+    unknown_path.write_bytes(b"unknown")
+    located = metadata_for(located_path)
+    located.country = "Serbia"
+    located.locality = "Belgrade"
 
-    destination = Path(plan["entries"][0]["destination"])
-    assert destination == output / "2026" / "Unclassified" / (
+    plan = video_organizer.build_plan(
+        source,
+        output,
+        [located, metadata_for(unknown_path)],
+        [],
+    )
+
+    destinations = {
+        entry["original_filename"]: Path(entry["destination"])
+        for entry in plan["entries"]
+    }
+    assert destinations["unknown.mov"] == output / "2026" / "Unclassified" / (
         "2026-09-08_18-42-15_Unclassified.mov"
     )
-    assert "IMG" not in destination.name
 
 
 def test_cyrillic_locations_are_transliterated_to_ascii(tmp_path):
@@ -395,6 +510,22 @@ def test_source_destination_overlap_is_rejected(tmp_path, source_name, output_na
         video_organizer.validate_separate_trees(source, tmp_path / output_name)
 
 
+def test_load_plan_accepts_legacy_video_schema(tmp_path):
+    source = tmp_path / "source"
+    output = tmp_path / "output"
+    source.mkdir()
+    plan_path = tmp_path / "legacy-plan.json"
+    payload = {
+        "schema_version": 1,
+        "source_directory": str(source),
+        "output_directory": str(output),
+        "entries": [],
+    }
+    plan_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert video_organizer.load_plan(plan_path)["schema_version"] == 1
+
+
 def test_metadata_index_reuses_and_invalidates_records(tmp_path):
     video = tmp_path / "video.mp4"
     video.write_bytes(b"first")
@@ -455,9 +586,13 @@ def test_write_plan_produces_json_and_markdown_reports(tmp_path):
 
     written_plan = json.loads(json_path.read_text(encoding="utf-8"))
     assert written_plan["summary"]["skipped"] == 1
+    assert written_plan["summary"]["total_files"] == 1
+    assert written_plan["summary"]["videos"] == 1
+    assert written_plan["summary"]["images"] == 0
     assert written_plan["plan_file"] == str(json_path)
     assert written_plan["report_file"] == str(markdown_path)
     report = markdown_path.read_text(encoding="utf-8")
+    assert report.startswith("# Media organization plan")
     assert str(video.resolve()) in report
     assert "Unclassified" in report
     assert "/bad.avi" in report
@@ -679,7 +814,7 @@ def test_main_plan_defaults_reports_to_output(monkeypatch, tmp_path, capsys):
     assert (output / "organization-plan.json").exists()
     assert (output / "organization-plan.md").exists()
     command_output = capsys.readouterr().out
-    assert "Building plan for 0 video(s)." in command_output
+    assert "Building plan for 0 media file(s)." in command_output
     assert str(output / "organization-plan.json") in command_output
 
 

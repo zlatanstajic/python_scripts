@@ -1,19 +1,20 @@
-Video Library Organizer
-=======================
+Photo and Video Library Organizer
+=================================
 
-``video-organizer`` recursively inspects one video directory and creates a
-separate, organized copy. It never moves, renames, deletes, modifies,
-re-encodes, or writes metadata into source videos. Input and output directory
+The existing ``video-organizer`` command handles both photos and videos for
+backward compatibility. It recursively inspects one media directory and
+creates a separate, organized copy. It never moves, renames, deletes,
+modifies, re-encodes, or writes metadata into source media. Input and output
 trees must not overlap.
 
 Workflow
 --------
 
-First inspect the library without writing a plan or copying videos:
+First inspect the library without writing a plan or copying media files:
 
 .. code-block:: bash
 
-   video-organizer scan --input "/home/user/Videos" --verbose
+   video-organizer scan --input "/home/user/Media" --verbose
 
 Then create reviewable JSON and Markdown manifests. By default they are saved
 as ``organization-plan.json`` and ``organization-plan.md`` inside the organized
@@ -22,7 +23,7 @@ output directory:
 .. code-block:: bash
 
    video-organizer plan \
-     --input "/home/user/Videos" \
+     --input "/home/user/Media" \
      --output "/home/user/Organized" \
      --verbose
 
@@ -37,8 +38,9 @@ Review the reports, then apply the exact approved JSON plan:
 ``--plan-file`` and ``--report-file`` select different report paths. Every
 manifest entry records its absolute source and destination, original and
 generated filenames, recording time and timezone, metadata provenance, GPS
-coordinates, resolved country and locality, detailed place, technical video
-metadata, warnings, source identity, SHA-256 digest, and operation status.
+coordinates, resolved country and locality, detailed place, media type,
+technical metadata, warnings, source identity, SHA-256 digest, and operation
+status.
 After every entry applies successfully, the JSON plan and Markdown report are
 removed. If any entry fails, both remain in place with the recorded operation
 statuses so the problem can be inspected and the plan retried.
@@ -57,15 +59,19 @@ the concise command output is unchanged.
 Discovery and metadata
 ----------------------
 
-The recognized extensions are MP4, MOV, MKV, AVI, WebM, M4V, WMV, MPEG, MPG,
-MTS, M2TS, and 3GP, case-insensitively. An extension only makes a file a
-candidate: FFprobe must confirm that it contains a video stream. Unreadable
-and invalid candidates are reported and do not stop unrelated files.
+Recognized image extensions are JPEG, JPG, PNG, HEIC, HEIF, WebP, TIFF, TIF,
+and AVIF. Recognized video extensions are MP4, MOV, MKV, AVI, WebM, M4V, WMV,
+MPEG, MPG, MTS, M2TS, and 3GP. Matching is case-insensitive. An extension only
+makes a file a candidate: FFprobe must confirm that it contains a decodable
+visual stream. Format availability can depend on the installed FFmpeg build.
+Unreadable and invalid candidates are reported and do not stop unrelated
+files.
 
 FFprobe is required on ``PATH``. ExifTool is optional and enriches recording
-timestamps, GPS, title, and camera/device metadata when installed. The
-organizer deliberately uses each source file's filesystem modification time as
-the effective recording time for year grouping and generated filenames. Its
+timestamps, EXIF GPS, title, dimensions, and camera/device metadata for photos
+and videos when installed. The organizer deliberately uses each source file's
+filesystem modification time as the effective recording time for year grouping
+and generated filenames. Its
 local UTC offset is retained and the manifest marks its provenance as
 ``filesystem:mtime``. The nanosecond modification time is also used for cache
 invalidation and approved-plan validation. Missing locations remain unknown.
@@ -85,11 +91,11 @@ the OpenStreetMap Nominatim service for reverse geocoding, opt in explicitly:
 .. code-block:: bash
 
    video-organizer plan \
-     --input "/home/user/Videos" \
+     --input "/home/user/Media" \
      --output "/home/user/Organized" \
      --allow-network-geocoding
 
-Only coordinates are used in the lookup; video contents are never uploaded.
+Only coordinates are used in the lookup; media contents are never uploaded.
 Exact lookup results are cached, requests are single-threaded and limited to
 one per second, and output includes OpenStreetMap attribution. The public
 server discourages large or recurring bulk jobs; read the `Nominatim usage
@@ -126,7 +132,7 @@ guess. The organizer never merges nearby coordinates with a radius rule.
 Output names and unknown metadata
 ---------------------------------
 
-Classified videos are grouped as ``Year/Country/Locality`` and named
+Classified media files are grouped as ``Year/Country/Locality`` and named
 ``YYYY-MM-DD_HH-MM-SS_Locality.ext``. Multiple visits to the same locality in
 one year therefore share a directory. Country and locality components are
 transliterated to ASCII Latin letters and digits with hyphen separators;
@@ -139,9 +145,17 @@ uses ``Unknown-Country`` or ``Unknown-Locality`` rather than placing non-ASCII
 text in a path. Deterministic ``_002``, ``_003``, and later suffixes resolve
 collisions.
 
-A known year with an unknown location goes to ``Year/Unclassified`` and is
-named ``YYYY-MM-DD_HH-MM-SS_Unclassified.ext``. Normal source files always
-have a filesystem modification time; ``Unclassified/Unknown-Year`` and
+If none of the media files has a classified location, the organizer
+omits location directories. Dated files then go directly under ``Year`` and
+use their sanitized containing-folder description as the filename title. For
+example, ``2022-08 - Traganou Beach on Rhodes`` produces
+``Year/YYYY-MM-DD_HH-MM-SS_Traganou_Beach_on_Rhodes.ext``. The leading
+``YYYY-MM - `` portion is omitted, and description words are joined with
+underscores. If at least one file is classified, a known year with an unknown
+location still goes to
+``Year/Unclassified`` and is named
+``YYYY-MM-DD_HH-MM-SS_Unclassified.ext``. Normal source files always have a
+filesystem modification time; ``Unclassified/Unknown-Year`` and
 ``Undated_<content-hash>.ext`` remain defensive fallbacks for manually created
 metadata without one. Organized filenames never reuse the original filename,
 although the original name remains recorded in both manifests. The tool never

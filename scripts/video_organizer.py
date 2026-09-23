@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build a verified, copy-only video library from an approved plan.
+"""Build a verified, copy-only photo and video library from an approved plan.
 
-The command has three phases: ``scan`` reads metadata without changing video
+The command has three phases: ``scan`` reads metadata without changing source
 files, ``plan`` writes JSON and Markdown manifests, and ``apply`` copies and
 verifies the files described by an approved JSON manifest.
 """
@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Iterable, Mapping, Protocol, Sequence, cast
 
-SUPPORTED_EXTENSIONS = {
+VIDEO_EXTENSIONS = {
     ".3gp",
     ".avi",
     ".m2ts",
@@ -41,7 +41,20 @@ SUPPORTED_EXTENSIONS = {
     ".webm",
     ".wmv",
 }
-SCHEMA_VERSION = 1
+IMAGE_EXTENSIONS = {
+    ".avif",
+    ".heic",
+    ".heif",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
+SUPPORTED_EXTENSIONS = VIDEO_EXTENSIONS | IMAGE_EXTENSIONS
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = {1, SCHEMA_VERSION}
 COPY_CHUNK_SIZE = 1024 * 1024
 DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/reverse"
 NOMINATIM_REQUEST_INTERVAL = 1.0
@@ -208,7 +221,7 @@ PercentageCallback = Callable[[int], None]
 
 @dataclass
 class VideoMetadata:
-    """Metadata and provenance collected for one candidate video."""
+    """Metadata and provenance collected for one candidate media file."""
 
     path: str
     original_filename: str
@@ -216,6 +229,7 @@ class VideoMetadata:
     original_directory: str
     file_size: int
     mtime_ns: int
+    media_type: str = "video"
     duration: float | None = None
     width: int | None = None
     height: int | None = None
@@ -435,7 +449,7 @@ class MetadataIndex:
 
 
 def default_index_path() -> Path:
-    """Return a cache path outside a typical source video directory."""
+    """Return a cache path outside a typical source media directory."""
     cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     return cache_root / "video-organizer" / "metadata.sqlite3"
 
@@ -467,8 +481,8 @@ def _run_json(command: Sequence[str]) -> Any:
     return json.loads(result.stdout)
 
 
-def discover_videos(source: Path, excluded: Sequence[Path] = ()) -> list[Path]:
-    """Return supported video candidates below source in deterministic order."""
+def discover_media(source: Path, excluded: Sequence[Path] = ()) -> list[Path]:
+    """Return supported media candidates below source in deterministic order."""
     source = source.expanduser().resolve()
     if not source.is_dir():
         raise ValueError(f"Input directory does not exist: {source}")
@@ -490,6 +504,11 @@ def discover_videos(source: Path, excluded: Sequence[Path] = ()) -> list[Path]:
             if candidate.suffix.lower() in SUPPORTED_EXTENSIONS:
                 discovered.append(candidate)
     return discovered
+
+
+def discover_videos(source: Path, excluded: Sequence[Path] = ()) -> list[Path]:
+    """Return supported media through the legacy discovery function name."""
+    return discover_media(source, excluded)
 
 
 def _parse_timestamp(value: str) -> tuple[str, str | None] | None:
@@ -537,8 +556,9 @@ def _as_float(value: Any) -> float | None:
 
 
 def extract_metadata(path: Path) -> VideoMetadata:
-    """Validate a video with FFprobe and combine FFprobe/ExifTool metadata."""
+    """Validate media with FFprobe and combine FFprobe/ExifTool metadata."""
     path = path.resolve()
+    media_type = "image" if path.suffix.lower() in IMAGE_EXTENSIONS else "video"
     stat = path.stat()
     metadata = VideoMetadata(
         path=str(path),
@@ -547,6 +567,7 @@ def extract_metadata(path: Path) -> VideoMetadata:
         original_directory=str(path.parent),
         file_size=stat.st_size,
         mtime_ns=stat.st_mtime_ns,
+        media_type=media_type,
     )
     probe = _run_json(
         (
@@ -560,19 +581,23 @@ def extract_metadata(path: Path) -> VideoMetadata:
             str(path),
         )
     )
-    video_streams = [
+    visual_streams = [
         stream
         for stream in probe.get("streams", [])
         if stream.get("codec_type") == "video"
     ]
-    if not video_streams:
-        raise ValueError("FFprobe found no video stream")
+    if not visual_streams:
+        expected = "decodable image" if media_type == "image" else "video stream"
+        raise ValueError(f"FFprobe found no {expected}")
 
-    stream = video_streams[0]
+    stream = visual_streams[0]
     format_data = probe.get("format", {})
     metadata.width = _integer_or_none(stream.get("width"))
     metadata.height = _integer_or_none(stream.get("height"))
-    metadata.duration = _as_float(format_data.get("duration") or stream.get("duration"))
+    if media_type == "video":
+        metadata.duration = _as_float(
+            format_data.get("duration") or stream.get("duration")
+        )
     probe_values: dict[str, Any] = {}
     probe_values.update(format_data.get("tags", {}))
     probe_values.update(stream.get("tags", {}))
@@ -586,6 +611,14 @@ def extract_metadata(path: Path) -> VideoMetadata:
         metadata.warnings.append("ExifTool is not installed; metadata may be limited")
     except (RuntimeError, json.JSONDecodeError, IndexError, TypeError) as error:
         metadata.warnings.append(f"ExifTool metadata unavailable: {error}")
+
+    if exif_values:
+        metadata.width = metadata.width or _integer_or_none(
+            _first_text(exif_values, ("ImageWidth", "ExifImageWidth"))
+        )
+        metadata.height = metadata.height or _integer_or_none(
+            _first_text(exif_values, ("ImageHeight", "ExifImageHeight"))
+        )
 
     combined = {**probe_values, **exif_values}
     _populate_metadata(metadata, combined)
@@ -721,7 +754,7 @@ def classify_location(
     geocoder: Geocoder,
     overrides: Mapping[str, Any],
 ) -> None:
-    """Classify a video using the documented conservative priority order."""
+    """Classify a media file using the documented conservative priority order."""
     if metadata.latitude is not None and metadata.longitude is not None:
         try:
             resolved = geocoder.resolve(metadata.latitude, metadata.longitude)
@@ -792,14 +825,14 @@ def scan_library(
     excluded: Sequence[Path] = (),
     progress: ProgressCallback | None = None,
 ) -> tuple[list[VideoMetadata], list[dict[str, str]]]:
-    """Discover videos, reuse valid cache records, and classify each file."""
+    """Discover media, reuse valid cache records, and classify each file."""
     source = source.expanduser().resolve()
     videos: list[VideoMetadata] = []
     skipped: list[dict[str, str]] = []
     _emit_progress(progress, f"Scanning recursively: {source}")
-    candidates = discover_videos(source, excluded)
+    candidates = discover_media(source, excluded)
     total = len(candidates)
-    _emit_progress(progress, f"Discovered {total} video candidate(s).")
+    _emit_progress(progress, f"Discovered {total} media candidate(s).")
     for position, path in enumerate(candidates, start=1):
         prefix = f"[{position}/{total}]"
         try:
@@ -858,6 +891,13 @@ def sanitize_component(value: str, fallback: str = "Unclassified") -> str:
     ascii_value = transliterated.encode("ascii", "ignore").decode("ascii")
     component = NON_ALPHANUMERIC.sub("-", ascii_value).strip("-")
     return component[:180].rstrip("-") or fallback
+
+
+def source_folder_title(source: Path) -> str:
+    """Return a filename-safe title derived from the source folder name."""
+    match = re.match(r"^\d{4}-\d{2}\s*-\s*(.+)$", source.name)
+    description = match.group(1) if match else source.name
+    return sanitize_component(description, "Source").replace("-", "_")
 
 
 def _english_alias_key(value: str) -> str:
@@ -960,8 +1000,11 @@ def build_plan(
     used: set[Path] = set()
     entries: list[dict[str, Any]] = []
     sorted_videos = sorted(videos, key=lambda item: item.path)
+    has_classified_locations = any(
+        item.country and item.locality for item in sorted_videos
+    )
     total = len(sorted_videos)
-    _emit_progress(progress, f"Building plan for {total} video(s).")
+    _emit_progress(progress, f"Building plan for {total} media file(s).")
     for position, metadata in enumerate(sorted_videos, start=1):
         prefix = f"[{position}/{total}]"
         country = english_country_name(metadata.country) if metadata.country else None
@@ -984,6 +1027,9 @@ def build_plan(
                     / sanitize_component(locality, "Unknown-Locality")
                 )
                 fragment = sanitize_component(locality, "Unknown-Locality")
+            elif not has_classified_locations:
+                directory = output / year
+                fragment = source_folder_title(Path(metadata.path).parent)
             else:
                 directory = output / year / "Unclassified"
                 fragment = "Unclassified"
@@ -1002,6 +1048,7 @@ def build_plan(
         entries.append(
             {
                 "source": metadata.path,
+                "media_type": metadata.media_type,
                 "destination": str(destination),
                 "original_filename": metadata.original_filename,
                 "generated_filename": destination.name,
@@ -1034,13 +1081,17 @@ def build_plan(
         )
         _emit_progress(progress, f"{prefix} Planned: {destination}")
     classified = sum(bool(entry["country"] and entry["locality"]) for entry in entries)
+    images = sum(entry["media_type"] == "image" for entry in entries)
+    videos = len(entries) - images
     return {
         "schema_version": SCHEMA_VERSION,
         "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "source_directory": str(source),
         "output_directory": str(output),
         "summary": {
-            "total_videos": len(entries),
+            "total_files": len(entries),
+            "videos": videos,
+            "images": images,
             "classified": classified,
             "unclassified": len(entries) - classified,
             "skipped": len(skipped),
@@ -1088,15 +1139,21 @@ def write_plan(plan: dict[str, Any], json_path: Path, markdown_path: Path) -> No
     plan["plan_file"] = str(json_path)
     plan["report_file"] = str(markdown_path)
     _atomic_json_write(json_path, plan)
+    summary = plan["summary"]
+    total_files = summary.get("total_files", summary.get("total_videos", 0))
+    video_files = summary.get("videos", total_files)
+    image_files = summary.get("images", 0)
     lines = [
-        "# Video organization plan",
+        "# Media organization plan",
         "",
         f"- Source: `{plan['source_directory']}`",
         f"- Destination: `{plan['output_directory']}`",
-        f"- Total videos: {plan['summary']['total_videos']}",
-        f"- Classified: {plan['summary']['classified']}",
-        f"- Unclassified: {plan['summary']['unclassified']}",
-        f"- Skipped: {plan['summary']['skipped']}",
+        f"- Total files: {total_files}",
+        f"- Videos: {video_files}",
+        f"- Images: {image_files}",
+        f"- Classified: {summary['classified']}",
+        f"- Unclassified: {summary['unclassified']}",
+        f"- Skipped: {summary['skipped']}",
         "",
     ]
     if any(
@@ -1158,7 +1215,7 @@ def load_plan(path: Path) -> dict[str, Any]:
     """Load and minimally validate a versioned organization plan."""
     with path.expanduser().resolve().open(encoding="utf-8") as handle:
         plan = json.load(handle)
-    if plan.get("schema_version") != SCHEMA_VERSION:
+    if plan.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError("Unsupported organization plan schema version")
     if not isinstance(plan.get("entries"), list):
         raise ValueError("Organization plan has no valid entries list")
@@ -1420,11 +1477,11 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse the scan, plan, and apply command-line interface."""
     parser = argparse.ArgumentParser(
-        description="Organize videos by recording year and parent locality without "
+        description="Organize photos and videos by year and parent locality without "
         "changing the source library."
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    scan_parser = commands.add_parser("scan", help="inspect videos without copying")
+    scan_parser = commands.add_parser("scan", help="inspect media without copying")
     _add_scan_options(scan_parser)
     plan_parser = commands.add_parser("plan", help="write organization manifests")
     _add_scan_options(plan_parser)
@@ -1484,12 +1541,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     )
                     or "Unclassified"
                 )
-                print(f"[VIDEO] {video.path} -> {location}")
+                print(f"[{video.media_type.upper()}] {video.path} -> {location}")
             for item in skipped:
                 print(f"[SKIPPED] {item['path']}: {item['reason']}")
             if args.allow_network_geocoding:
                 print(NOMINATIM_ATTRIBUTION)
-            print(f"Finished: {len(videos)} videos, {len(skipped)} skipped.")
+            print(f"Finished: {len(videos)} files, {len(skipped)} skipped.")
             return 1 if skipped else 0
 
         if args.command == "plan":
@@ -1512,7 +1569,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             write_plan(plan, plan_file, report_file)
             print(f"Wrote {plan_file} and {report_file}.")
             print(
-                f"Planned: {len(videos)} videos, {len(skipped)} skipped; "
+                f"Planned: {len(videos)} files, {len(skipped)} skipped; "
                 "no files copied."
             )
             if args.allow_network_geocoding:
