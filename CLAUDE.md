@@ -31,7 +31,7 @@ WeasyPrint needs its system libraries (pango/cairo) present for PDF generation.
 ```bash
 python scripts/cv_generator.py        # reads MARKDOWN_FILE_URL, PDF_OUTPUT_LOCATION
 python scripts/screenshot.py          # reads SCREENSHOT_SITES, SCREENSHOT_OUTPUT_DIR
-python scripts/media_organizer.py -h  # scan, plan, and apply subcommands
+python scripts/media_organizer.py -h  # scan, plan, apply, and report subcommands
 
 python -m pytest tests/                                   # full suite + coverage
 python -m pytest tests/test_screenshot.py::test_load_config_parses_sites_and_creates_output_directory
@@ -64,7 +64,8 @@ the *current working directory* (`Path.cwd() / ".env"`), loaded with
 `override=False` so real environment variables win. A missing `.env` is a hard
 error. Neither CLI has options beyond `-h`/`--help`, and any new setting must be
 documented in `.env.example`. `media_organizer` reads no `.env`: it is configured
-only through its `scan`/`plan`/`apply` flags. Never read or write the real `.env`.
+only through its `scan`/`plan`/`apply`/`report` flags. Never read or write the
+real `.env`.
 
 ## Conventions that matter here
 
@@ -128,6 +129,16 @@ only through its `scan`/`plan`/`apply` flags. Never read or write the real `.env
   undated names use a content-hash prefix.
 - The effective recording timestamp is always the source filesystem mtime,
   labeled `filesystem:mtime`; embedded timestamps do not drive output paths.
+- `report` reuses the scan pipeline and writes `media-report.json` to the
+  current working directory, which may be inside the scanned tree. Paths that
+  match `ORGANIZED_PATH` (`Year/Country/Locality/` plus a filename repeating
+  that year and locality) take their location from the path as
+  `organized:path`, because an organized copy carries neither its
+  classification nor its source mtime.
+- Orientation uses the displayed size: FFprobe display-matrix rotation, else
+  EXIF `Orientation` for photos. A photo with several FFprobe streams is a
+  tiled HEIF, so its size comes only from ExifTool. `MetadataIndex.get`
+  treats records without a `rotation` key as stale.
 - Network reverse geocoding is disabled unless `--allow-network-geocoding` is
   supplied. `NominatimGeocoder` accepts only http(s) endpoints with a host, which
   is what justifies its `# nosec B310`. Tests must use fake geocoders and metadata

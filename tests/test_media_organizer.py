@@ -145,6 +145,51 @@ def test_extract_image_metadata_with_ffprobe_and_exiftool(monkeypatch, tmp_path)
     assert result.camera == "Example Phone"
 
 
+@pytest.mark.parametrize(
+    "stream, exif_orientation, expected",
+    [
+        ({"side_data_list": [{"rotation": 90}]}, None, 270),
+        ({"side_data_list": [{"rotation": -90}]}, 8, 90),
+        ({"side_data_list": [{"rotation": -180}]}, None, 180),
+        ({}, 6, 90),
+        ({}, 8, 270),
+        ({}, 1, 0),
+        ({}, None, 0),
+    ],
+)
+def test_display_rotation_prefers_ffprobe_over_exif_orientation(
+    stream, exif_orientation, expected
+):
+    assert media_organizer._display_rotation(stream, exif_orientation) == expected
+
+
+@pytest.mark.parametrize(
+    "exiftool_output, expected_size",
+    [
+        ([{"ImageWidth": 4032, "ImageHeight": 3024, "Orientation": 6}], (3024, 4032)),
+        (None, None),
+    ],
+)
+def test_tiled_photo_takes_its_size_from_exiftool(
+    monkeypatch, tmp_path, exiftool_output, expected_size
+):
+    photo = tmp_path / "IMG_0001.HEIC"
+    photo.write_bytes(b"photo")
+
+    def fake_run(command):
+        if command[0] == "ffprobe":
+            tile = {"codec_type": "video", "width": 512, "height": 512}
+            return {"streams": [tile, dict(tile)], "format": {}}
+        if exiftool_output is None:
+            raise FileNotFoundError("exiftool")
+        return exiftool_output
+
+    monkeypatch.setattr(media_organizer, "_run_json", fake_run)
+    result = media_organizer.extract_metadata(photo)
+
+    assert media_organizer.display_size(result) == expected_size
+
+
 def test_extract_metadata_rejects_undecodable_image(monkeypatch, tmp_path):
     candidate = tmp_path / "invalid.jpg"
     candidate.write_bytes(b"not-image")
@@ -539,6 +584,20 @@ def test_metadata_index_reuses_and_invalidates_records(tmp_path):
         assert index.get(video) is None
 
 
+def test_metadata_index_rereads_records_cached_without_rotation(tmp_path):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+
+    with media_organizer.MetadataIndex(tmp_path / "index.sqlite3") as index:
+        index.put(metadata_for(video))
+        (stored,) = index.connection.execute("SELECT metadata FROM media").fetchone()
+        record = json.loads(stored)
+        del record["rotation"]
+        index.connection.execute("UPDATE media SET metadata = ?", (json.dumps(record),))
+
+        assert index.get(video) is None
+
+
 def test_metadata_index_invalidates_old_non_english_geocodes(tmp_path):
     index_path = tmp_path / "index.sqlite3"
     connection = sqlite3.connect(index_path)
@@ -923,3 +982,118 @@ def test_source_permissions_and_content_are_not_modified(tmp_path):
     assert after.st_mode == before.st_mode
     assert after.st_mtime_ns == before.st_mtime_ns
     assert video.read_bytes() == b"video"
+
+
+@pytest.mark.parametrize(
+    "relative_path, expected",
+    [
+        (
+            "2026/Spain/Lloret-de-Mar/2026-09-08_18-42-15_Lloret-de-Mar.mov",
+            ("Spain", "Lloret-de-Mar"),
+        ),
+        (
+            "2026/Spain/Lloret-de-Mar/2026-09-08_18-42-15_Lloret-de-Mar_002.MOV",
+            ("Spain", "Lloret-de-Mar"),
+        ),
+        ("2025/Spain/Lloret-de-Mar/2026-09-08_18-42-15_Lloret-de-Mar.mov", None),
+        ("2026/Spain/Girona/2026-09-08_18-42-15_Lloret-de-Mar.mov", None),
+        ("2026/2026/Unclassified/2026-09-08_18-42-15_Unclassified.mov", None),
+        ("2019/Camera/Stark/FHD0015.MOV", None),
+        ("2019/2019-07-21_17-07-52_Jul_Lefkada.MOV", None),
+    ],
+)
+def test_organized_location_requires_the_generated_layout(
+    tmp_path, relative_path, expected
+):
+    location = media_organizer.Location(*expected) if expected else None
+
+    assert media_organizer.organized_location(tmp_path / relative_path) == location
+
+
+def test_build_report_counts_types_formats_orientations_and_locations(tmp_path):
+    library = tmp_path / "Organized"
+    belgrade = library / "2026" / "Serbia" / "Belgrade"
+    belgrade.mkdir(parents=True)
+    upright_video = belgrade / "2026-09-08_18-42-15_Belgrade.MP4"
+    photo = belgrade / "2026-09-08_18-42-15_Belgrade_002.jpg"
+    square_photo = library / "square.png"
+    unknown_video = library / "unknown.mov"
+    for path in (upright_video, photo, square_photo, unknown_video):
+        path.write_bytes(path.name.encode())
+    upright = metadata_for(upright_video)
+    upright.width, upright.height, upright.rotation = 1920, 1080, 90
+    landscape = metadata_for(photo)
+    landscape.width, landscape.height = 4000, 3000
+    square = metadata_for(square_photo)
+    square.width = square.height = 1080
+    square.country, square.locality = "Greece", "Athens"
+    square.location_provenance = "gps:nominatim"
+
+    report = media_organizer.build_report(
+        library,
+        [upright, landscape, square, metadata_for(unknown_video)],
+        [{"path": "/bad.avi", "reason": "invalid"}],
+    )
+
+    assert report["directory"] == str(library.resolve())
+    assert report["summary"] == {
+        "total_files": 4,
+        "images": 2,
+        "videos": 2,
+        "classified": 3,
+        "unclassified": 1,
+        "countries": 2,
+        "localities": 2,
+        "skipped": 1,
+    }
+    assert report["formats"] == {
+        "image": {"JPG": 1, "PNG": 1},
+        "video": {"MOV": 1, "MP4": 1},
+    }
+    assert report["orientations"] == {
+        "image": {"landscape": 1, "square": 1},
+        "video": {"portrait": 1, "unknown": 1},
+    }
+    assert report["locations"] == {"Greece": {"Athens": 1}, "Serbia": {"Belgrade": 2}}
+    entries = {Path(entry["path"]).name: entry for entry in report["entries"]}
+    assert entries[upright_video.name]["resolution"] == "1080x1920"
+    assert entries[upright_video.name]["location_provenance"] == "organized:path"
+    assert entries[unknown_video.name]["country"] is None
+    assert report["skipped"] == [{"path": "/bad.avi", "reason": "invalid"}]
+    assert report["geocoding_attribution"] == media_organizer.NOMINATIM_ATTRIBUTION
+
+
+def test_main_report_writes_inventory_to_current_directory(
+    monkeypatch, tmp_path, capsys
+):
+    library = tmp_path / "Organized"
+    athens = library / "2024" / "Greece" / "Athens"
+    athens.mkdir(parents=True)
+    (athens / "2024-05-01_10-00-00_Athens.jpg").write_bytes(b"photo")
+    (library / "clip.mp4").write_bytes(b"video")
+
+    def fake_run(command):
+        if command[0] == "exiftool":
+            raise FileNotFoundError("exiftool")
+        width, height = (3000, 4000) if command[-1].endswith(".jpg") else (1920, 1080)
+        stream = {"codec_type": "video", "width": width, "height": height}
+        return {"streams": [stream], "format": {}}
+
+    monkeypatch.setattr(media_organizer, "_run_json", fake_run)
+    monkeypatch.chdir(library)
+    arguments = ["report", "--index", str(tmp_path / "index.sqlite3")]
+
+    assert media_organizer.main(arguments) == 0
+    assert media_organizer.main(arguments) == 0
+
+    report = json.loads((library / "media-report.json").read_text(encoding="utf-8"))
+    assert report["directory"] == str(library.resolve())
+    assert report["summary"]["total_files"] == 2
+    assert report["orientations"] == {
+        "image": {"portrait": 1},
+        "video": {"landscape": 1},
+    }
+    assert report["locations"] == {"Greece": {"Athens": 1}}
+    assert (
+        f"Wrote {library.resolve() / 'media-report.json'}." in capsys.readouterr().out
+    )

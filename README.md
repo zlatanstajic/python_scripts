@@ -147,6 +147,22 @@ inspection and retry. Copies are grouped under
 plan's size and SHA-256 digest, and finalized without overwriting existing
 files. Source and destination trees may not overlap.
 
+After organizing, run `report` inside the library to save a JSON inventory of
+what it holds:
+
+```bash
+cd "/home/user/Organized"
+media-organizer report
+```
+
+`report` writes `media-report.json` to the current directory and replaces an
+older report there. It counts photos, videos, formats such as `JPG` and `MP4`,
+orientations such as landscape and portrait, and files per country and
+locality. It also lists every file. Files in the organizer's
+`Year/Country/Locality` folders report that folder's location; other files are
+classified the same way `scan` classifies them. `--input` reports on another
+directory, and the report is still saved in the current directory.
+
 Location path components are transliterated to ASCII and use only Latin
 letters, digits, and hyphen separators. Known localized location names are
 canonicalized to English first (for example, `España` becomes `Spain` and
@@ -162,13 +178,14 @@ Year grouping and generated timestamps use the source file's filesystem
 modification time. Reports identify this explicitly with the
 `filesystem:mtime` provenance and retain its local UTC offset.
 
-`--verbose` is optional on all three subcommands. It displays recursive
+`--verbose` is optional on all four subcommands. It displays recursive
 discovery, cache and metadata activity, classification, per-file planning,
 hashing and copying percentages, verification, status persistence, and cleanup.
 
 FFprobe is required to validate supported photo and video formats. ExifTool is
 used when installed for richer EXIF, GPS, title, and camera metadata and
-otherwise produces a warning. Embedded GPS coordinates stay local by default.
+otherwise produces a warning. Without ExifTool, the report can show a rotated
+photo in its stored orientation. Embedded GPS coordinates stay local by default.
 Passing
 `--allow-network-geocoding` explicitly permits coordinates to be sent to the
 OpenStreetMap Nominatim reverse-geocoding service; responses are cached in the

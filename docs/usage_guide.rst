@@ -66,6 +66,10 @@ The source directory is recursively scanned and remains unchanged throughout.
 The plan and report default to the output directory and are removed after a
 fully successful apply. They remain available when an entry fails.
 The optional ``--verbose`` flag shows detailed progress during every phase.
+
+Run ``media-organizer report`` inside the organized library to save a JSON
+inventory of its photos, videos, formats, orientations, and locations as
+``media-report.json`` in the current directory.
 See :doc:`media_organizer` for the complete safety and metadata behavior.
 
 Running the modules by file path

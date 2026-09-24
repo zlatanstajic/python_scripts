@@ -44,13 +44,57 @@ After every entry applies successfully, the JSON plan and Markdown report are
 removed. If any entry fails, both remain in place with the recorded operation
 statuses so the problem can be inspected and the plan retried.
 
+Library report
+--------------
+
+After organizing, run ``report`` inside the library to save a JSON inventory
+of what it holds:
+
+.. code-block:: bash
+
+   cd "/home/user/Organized"
+   media-organizer report
+
+The inventory is written to ``media-report.json`` in the current directory and
+replaces an older report there. ``--input`` selects a different directory; the
+report is still saved in the current directory. ``report`` accepts the same
+``--overrides``, ``--index``, geocoding, and ``--verbose`` options as ``scan``,
+never copies media, and exits with status 1 when a file is skipped. The JSON
+file contains:
+
+* ``summary``: total, photo, video, classified, unclassified, country,
+  locality, and skipped counts.
+* ``formats``: file extensions such as ``JPG`` or ``MP4``, counted separately
+  for images and videos.
+* ``orientations``: ``landscape``, ``portrait``, ``square``, and ``unknown``
+  files, counted separately for images and videos.
+* ``locations``: files per locality within each country.
+* ``entries``: each file's path, media type, format, size in bytes, displayed
+  resolution, orientation, duration, country, locality, and location
+  provenance.
+* ``skipped``: files that could not be read, with the reason.
+
+Orientation compares the displayed width and height. Video rotation comes from
+the FFprobe display matrix. Photo rotation comes from the EXIF orientation that
+ExifTool reads, so without ExifTool a rotated photo keeps its stored
+orientation. FFprobe 7 and later list each tile of a tiled HEIF photo as a
+separate stream; such a photo takes its size from ExifTool and is ``unknown``
+without it.
+
+A file whose path follows the organizer's ``Year/Country/Locality`` layout, and
+whose generated name repeats that year and locality, reports that folder's
+country and locality with ``organized:path`` provenance. Other files are
+classified the same way ``scan`` classifies them. When OpenStreetMap
+Nominatim resolved a location, the report includes its attribution.
+
 Progress reporting
 ------------------
 
-``--verbose`` is available on ``scan``, ``plan``, and ``apply``. It flushes
-messages immediately so progress remains visible during long operations. Scan
-reports recursive discovery, cache hits, metadata extraction, classification,
-and skipped files. Plan reports destination selection and hashing percentages.
+``--verbose`` is available on ``scan``, ``plan``, ``apply``, and ``report``. It
+flushes messages immediately so progress remains visible during long
+operations. Scan and report show recursive discovery, cache hits, metadata
+extraction, classification, and skipped files. Plan reports destination
+selection and hashing percentages.
 Apply reports source validation, copying and verification percentages, each
 saved operation status, failures, and final plan cleanup. Without the option,
 the concise command output is unchanged.
@@ -168,7 +212,8 @@ The default SQLite index is
 unset, ``~/.cache/media-organizer/metadata.sqlite3``. ``--index`` selects a
 different path, but the index must remain outside the source tree. Cached
 metadata is reused only while absolute path, size, nanosecond modification
-time, device, and inode still match.
+time, device, and inode still match. Records cached before display rotation
+was recorded are read again once.
 
 Planning hashes every source file. Applying a plan checks its recorded size,
 timestamp, and SHA-256 before copying. It checks available space, writes a

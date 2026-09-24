@@ -3,7 +3,8 @@
 
 The command has three phases: ``scan`` reads metadata without changing source
 files, ``plan`` writes JSON and Markdown manifests, and ``apply`` copies and
-verifies the files described by an approved JSON manifest.
+verifies the files described by an approved JSON manifest. ``report`` writes a
+JSON inventory of the media in a directory, such as a finished library.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -55,6 +57,8 @@ IMAGE_EXTENSIONS = {
 SUPPORTED_EXTENSIONS = VIDEO_EXTENSIONS | IMAGE_EXTENSIONS
 SCHEMA_VERSION = 2
 SUPPORTED_SCHEMA_VERSIONS = {1, SCHEMA_VERSION}
+REPORT_SCHEMA_VERSION = 1
+REPORT_FILENAME = "media-report.json"
 COPY_CHUNK_SIZE = 1024 * 1024
 DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/reverse"
 NOMINATIM_REQUEST_INTERVAL = 1.0
@@ -71,6 +75,13 @@ GPS_LATITUDE_KEYS = ("GPSLatitude", "com.apple.quicktime.location.ISO6709")
 GPS_LONGITUDE_KEYS = ("GPSLongitude",)
 COUNTRY_KEYS = ("Country", "CountryCode", "LocationCountry")
 LOCALITY_KEYS = ("City", "Town", "Village", "LocationCity")
+EXIF_ORIENTATION_ROTATIONS = {3: 180, 4: 180, 5: 270, 6: 90, 7: 90, 8: 270}
+# Classified copies are written to Year/Country/Locality/ and repeat the year
+# and locality in their generated filename, optionally with a _NNN suffix.
+ORGANIZED_PATH = re.compile(
+    r"(?P<year>\d{4})/(?P<country>[A-Za-z0-9-]+)/(?P<locality>[A-Za-z0-9-]+)/"
+    r"(?P=year)-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(?P=locality)(?:_\d{3,})?\.\w+"
+)
 
 _TRANSLITERATION_BASE = {
     "А": "A",
@@ -233,6 +244,7 @@ class MediaMetadata:
     duration: float | None = None
     width: int | None = None
     height: int | None = None
+    rotation: int = 0
     recording_timestamp: str | None = None
     recording_timezone: str | None = None
     timestamp_provenance: str | None = None
@@ -375,7 +387,7 @@ class MetadataIndex:
         self.connection.close()
 
     def get(self, path: Path) -> MediaMetadata | None:
-        """Return cached metadata when all relevant file identity fields match."""
+        """Return cached metadata when the file identity matches a current record."""
         stat = path.stat()
         row = self.connection.execute(
             "SELECT size, mtime_ns, device, inode, metadata FROM media WHERE path = ?",
@@ -388,7 +400,10 @@ class MetadataIndex:
             stat.st_ino,
         ):
             return None
-        return MediaMetadata(**json.loads(row[4]))
+        record = json.loads(row[4])
+        if "rotation" not in record:
+            return None  # cached before display rotation was recorded
+        return MediaMetadata(**record)
 
     def put(self, metadata: MediaMetadata) -> None:
         """Insert or replace cached metadata for a source file."""
@@ -590,8 +605,11 @@ def extract_metadata(path: Path) -> MediaMetadata:
 
     stream = visual_streams[0]
     format_data = probe.get("format", {})
-    metadata.width = _integer_or_none(stream.get("width"))
-    metadata.height = _integer_or_none(stream.get("height"))
+    if media_type == "video" or len(visual_streams) == 1:
+        # FFprobe 7+ lists each tile of a tiled HEIF photo as a separate stream,
+        # so a photo with several streams takes its full size from ExifTool.
+        metadata.width = _integer_or_none(stream.get("width"))
+        metadata.height = _integer_or_none(stream.get("height"))
     if media_type == "video":
         metadata.duration = _as_float(
             format_data.get("duration") or stream.get("duration")
@@ -617,6 +635,9 @@ def extract_metadata(path: Path) -> MediaMetadata:
         metadata.height = metadata.height or _integer_or_none(
             _first_text(exif_values, ("ImageHeight", "ExifImageHeight"))
         )
+    metadata.rotation = _display_rotation(
+        stream, exif_values.get("Orientation") if media_type == "image" else None
+    )
 
     combined = {**probe_values, **exif_values}
     _populate_metadata(metadata, combined)
@@ -637,6 +658,17 @@ def _integer_or_none(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _display_rotation(stream: Mapping[str, Any], exif_orientation: Any) -> int:
+    """Return the clockwise rotation, in degrees, that media needs for display."""
+    for side_data in stream.get("side_data_list", []):
+        rotation = _as_float(side_data.get("rotation"))
+        if rotation is not None:
+            # FFprobe reports the display-matrix rotation counterclockwise.
+            return round(-rotation / 90) % 4 * 90
+    orientation = _integer_or_none(exif_orientation)
+    return EXIF_ORIENTATION_ROTATIONS.get(orientation or 0, 0)
 
 
 def _embedded_location_pair(values: Mapping[str, Any]) -> tuple[str, str] | None:
@@ -1446,9 +1478,107 @@ def _matches_entry(
     )
 
 
+def display_size(metadata: MediaMetadata) -> tuple[int, int] | None:
+    """Return the width and height as displayed, after any quarter-turn rotation."""
+    if not metadata.width or not metadata.height:
+        return None
+    if metadata.rotation in (90, 270):
+        return metadata.height, metadata.width
+    return metadata.width, metadata.height
+
+
+def orientation_label(size: tuple[int, int] | None) -> str:
+    """Name the orientation of a displayed width and height."""
+    if size is None:
+        return "unknown"
+    width, height = size
+    if width == height:
+        return "square"
+    return "landscape" if width > height else "portrait"
+
+
+def organized_location(path: Path) -> Location | None:
+    """Return the country and locality recorded by an organized copy's path."""
+    match = ORGANIZED_PATH.fullmatch("/".join(path.parts[-4:]))
+    if match is None or "Unclassified" in match.group("country", "locality"):
+        return None
+    return Location(match.group("country"), match.group("locality"))
+
+
+def build_report(
+    directory: Path,
+    media_files: Sequence[MediaMetadata],
+    skipped: Sequence[Mapping[str, str]],
+) -> dict[str, Any]:
+    """Count the media types, formats, orientations, and locations in a directory."""
+    entries: list[dict[str, Any]] = []
+    formats: dict[str, Counter[str]] = {"image": Counter(), "video": Counter()}
+    orientations: dict[str, Counter[str]] = {"image": Counter(), "video": Counter()}
+    locations: dict[str, Counter[str]] = {}
+    for metadata in sorted(media_files, key=lambda item: item.path):
+        country, locality = metadata.country, metadata.locality
+        provenance = metadata.location_provenance
+        organized = organized_location(Path(metadata.path))
+        if organized is not None:
+            country, locality = organized.country, organized.locality
+            provenance = "organized:path"
+        size = display_size(metadata)
+        media_format = metadata.extension.lstrip(".").upper()
+        media_orientation = orientation_label(size)
+        formats[metadata.media_type][media_format] += 1
+        orientations[metadata.media_type][media_orientation] += 1
+        if country and locality:
+            locations.setdefault(country, Counter())[locality] += 1
+        entries.append(
+            {
+                "path": metadata.path,
+                "media_type": metadata.media_type,
+                "format": media_format,
+                "file_size": metadata.file_size,
+                "resolution": f"{size[0]}x{size[1]}" if size else None,
+                "orientation": media_orientation,
+                "duration": metadata.duration,
+                "country": country,
+                "locality": locality,
+                "location_provenance": provenance,
+            }
+        )
+    classified = sum(bool(entry["country"] and entry["locality"]) for entry in entries)
+    images = sum(entry["media_type"] == "image" for entry in entries)
+    report: dict[str, Any] = {
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "directory": str(directory.expanduser().resolve()),
+        "summary": {
+            "total_files": len(entries),
+            "images": images,
+            "videos": len(entries) - images,
+            "classified": classified,
+            "unclassified": len(entries) - classified,
+            "countries": len(locations),
+            "localities": sum(len(counts) for counts in locations.values()),
+            "skipped": len(skipped),
+        },
+        "formats": {
+            kind: dict(sorted(counts.items())) for kind, counts in formats.items()
+        },
+        "orientations": {
+            kind: dict(sorted(counts.items())) for kind, counts in orientations.items()
+        },
+        "locations": {
+            country: dict(sorted(locations[country].items()))
+            for country in sorted(locations)
+        },
+        "entries": entries,
+        "skipped": list(skipped),
+    }
+    if any(entry["location_provenance"] == "gps:nominatim" for entry in entries):
+        report["geocoding_attribution"] = NOMINATIM_ATTRIBUTION
+    return report
+
+
 def _add_scan_options(parser: argparse.ArgumentParser) -> None:
-    """Add options shared by the scan and plan commands."""
-    parser.add_argument("--input", required=True, type=Path, help="source directory")
+    """Add the metadata and classification options shared by media scans."""
     parser.add_argument("--overrides", type=Path, help="optional classification JSON")
     parser.add_argument(
         "--index",
@@ -1469,20 +1599,26 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="show detailed progress while scanning and planning",
+        help="show detailed progress",
     )
 
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse the scan, plan, and apply command-line interface."""
+    """Parse the scan, plan, apply, and report command-line interface."""
     parser = argparse.ArgumentParser(
         description="Organize photos and videos by year and parent locality without "
         "changing the source library."
     )
     commands = parser.add_subparsers(dest="command", required=True)
     scan_parser = commands.add_parser("scan", help="inspect media without copying")
+    scan_parser.add_argument(
+        "--input", required=True, type=Path, help="source directory"
+    )
     _add_scan_options(scan_parser)
     plan_parser = commands.add_parser("plan", help="write organization manifests")
+    plan_parser.add_argument(
+        "--input", required=True, type=Path, help="source directory"
+    )
     _add_scan_options(plan_parser)
     plan_parser.add_argument("--output", required=True, type=Path)
     plan_parser.add_argument("--plan-file", type=Path)
@@ -1494,6 +1630,16 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
         action="store_true",
         help="show hashing, copying, verification, and cleanup progress",
     )
+    report_parser = commands.add_parser(
+        "report", help=f"write {REPORT_FILENAME} to the current directory"
+    )
+    report_parser.add_argument(
+        "--input",
+        type=Path,
+        default=Path("."),
+        help="media directory to report on (default: current directory)",
+    )
+    _add_scan_options(report_parser)
     return parser.parse_args(arguments)
 
 
@@ -1571,6 +1717,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 f"Planned: {len(media_files)} files, {len(skipped)} skipped; "
                 "no files copied."
             )
+            if args.allow_network_geocoding:
+                print(NOMINATIM_ATTRIBUTION)
+            return 1 if skipped else 0
+
+        if args.command == "report":
+            media_files, skipped = _scan_from_arguments(args)
+            report_file = Path.cwd() / REPORT_FILENAME
+            _atomic_json_write(
+                report_file, build_report(args.input, media_files, skipped)
+            )
+            print(f"Wrote {report_file}.")
+            print(f"Reported: {len(media_files)} files, {len(skipped)} skipped.")
             if args.allow_network_geocoding:
                 print(NOMINATIM_ATTRIBUTION)
             return 1 if skipped else 0
