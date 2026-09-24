@@ -100,7 +100,7 @@ one per second, and output includes OpenStreetMap attribution. The public
 server discourages large or recurring bulk jobs; read the `Nominatim usage
 policy <https://operations.osmfoundation.org/policies/nominatim/>`_ before
 opting in. ``--geocoder-url`` can select a compatible self-hosted or alternate
-service. Service availability and returned administrative boundaries remain
+service; it must be an ``http`` or ``https`` URL. Service availability and returned administrative boundaries remain
 external limitations, so review the plan before applying it.
 
 Overrides

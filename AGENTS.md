@@ -14,7 +14,7 @@ These instructions apply to every agent working in this repository.
 ## Source ownership
 
 - [`scripts/`](scripts/) is the installable application package. It contains
-  the CV generator and website screenshot utilities.
+  the CV generator, website screenshot, and media organizer utilities.
 - [`tests/`](tests/) contains pytest tests. Test files use the
   `test_*.py` naming convention.
 - [`docs/`](docs/) contains the Sphinx documentation.
@@ -27,15 +27,18 @@ These instructions apply to every agent working in this repository.
 
 ## Python conventions
 
-- Support Python 3.10 through 3.12.
+- Support Python 3.10 through 3.13.
 - Follow PEP 8, use `snake_case`, and keep lines within 88 characters.
 - Add type hints where practical and use Google-style docstrings.
 - Keep imports compatible with the Black and isort configuration in
   [`pyproject.toml`](pyproject.toml).
-- Preserve documented CLI behavior and configuration-only interfaces. Do not
-  introduce new flags or change output paths without updating tests and docs.
-- Read runtime configuration through `python-dotenv`. Document new keys in
-  [`.env.example`](.env.example), but never read or write a real `.env` file.
+- Preserve documented CLI behavior. Do not introduce new flags or change output
+  paths without updating tests and docs.
+- `cv-generator` and `website-screenshot` are configuration-only: they read
+  runtime configuration through `python-dotenv`, and new keys must be documented
+  in [`.env.example`](.env.example). `media-organizer` reads no `.env` and is
+  configured only through its subcommand flags.
+- Never read or write a real `.env` file.
 - Do not add a dependency or materially change packaging without explicit
   approval.
 

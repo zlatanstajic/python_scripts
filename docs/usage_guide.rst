@@ -83,10 +83,5 @@ the installed commands:
 Development commands
 --------------------
 
-.. code-block:: bash
-
-   python3 -m pytest tests/
-   python3 -m compileall -q scripts tests
-   python3 -m flake8 scripts/
-   python3 -m mypy scripts/
-   python3 -m sphinx -W -b html docs docs/_build/html
+The complete local quality gate is listed in :doc:`contributing`, and
+:doc:`cicd` describes which of those checks CI runs.

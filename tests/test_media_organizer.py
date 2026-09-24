@@ -766,6 +766,42 @@ def test_index_inside_source_is_rejected(tmp_path, capsys):
     assert "must be outside" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "geocoder_url",
+    ["file:///etc/passwd", "ftp://example.com/reverse", "https:///reverse", "reverse"],
+)
+def test_non_http_geocoder_url_is_rejected(tmp_path, capsys, geocoder_url):
+    source = tmp_path / "source"
+    source.mkdir()
+
+    result = media_organizer.main(
+        [
+            "scan",
+            "--input",
+            str(source),
+            "--index",
+            str(tmp_path / "index.sqlite3"),
+            "--allow-network-geocoding",
+            "--geocoder-url",
+            geocoder_url,
+        ]
+    )
+
+    assert result == 1
+    assert "must be an http or https URL" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "geocoder_url",
+    ["https://nominatim.example.org/reverse", "http://localhost:8080/reverse"],
+)
+def test_http_geocoder_url_is_accepted(tmp_path, geocoder_url):
+    with media_organizer.MetadataIndex(tmp_path / "index.sqlite3") as index:
+        geocoder = media_organizer.NominatimGeocoder(index, geocoder_url)
+
+    assert geocoder.url == geocoder_url
+
+
 def test_plan_reports_inside_source_are_rejected(tmp_path, capsys):
     source = tmp_path / "source"
     source.mkdir()

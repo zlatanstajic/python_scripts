@@ -23,6 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: System :: Systems Administration",
   "Topic :: Utilities",
 ]
@@ -51,7 +52,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/zlatanstajic/python_scripts"
-Documentation = "https://github.com/zlatanstajic/python_scripts/tree/master/docs"
+Documentation = "https://zlatanstajic.github.io/python_scripts/"
 Repository = "https://github.com/zlatanstajic/python_scripts"
 Issues = "https://github.com/zlatanstajic/python_scripts/issues"
 
@@ -65,7 +66,6 @@ packages = ["scripts"]
 
 [tool.black]
 line-length = 88
-target-version = ["py37", "py38", "py39", "py310", "py311", "py312"]
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -118,55 +118,8 @@ exclude_lines = [
 precision = 2
 show_missing = true
 
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unreachable = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-check_untyped_defs = true
-show_error_codes = true
-no_implicit_optional = true
-warn_no_return = true
-strict_optional = true
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["dotenv"]
-ignore_missing_imports = true
-
-[tool.bandit]
-exclude_dirs = ["tests", ".venv", ".git"]
-skips = []
-severity = "high"
-confidence = "high"
-
-[tool.flake8]
-max-line-length = 88
-extend-ignore = ["E203", "E266", "E501", "W503"]
-exclude = [
-  ".git",
-  "__pycache__",
-  ".venv",
-  ".pytest_cache",
-  ".mypy_cache",
-  "build",
-  "dist",
-  ".eggs",
-]
-per-file-ignores = ["__init__.py:F401"]
-
 [tool.pydocstyle]
 convention = "google"
 add-ignore = ["D100", "D104"]
 match = "(?!test_).*\\.py"
 match-dir = "(?!tests)[^\\.].*"
-
-[tool.pylint.messages_control]
-disable = ["C0330", "C0326", "R0903", "R0913", "W0212"]
-
-[tool.pylint.format]
-max-line-length = 88

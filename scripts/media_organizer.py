@@ -275,7 +275,10 @@ class NominatimGeocoder:
     """Opt-in OpenStreetMap Nominatim resolver with SQLite-backed caching."""
 
     def __init__(self, index: "MetadataIndex", url: str = DEFAULT_GEOCODER_URL):
-        """Initialize the resolver with a cache and provider endpoint."""
+        """Initialize the resolver with a cache and an http(s) provider endpoint."""
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError(f"Geocoder URL must be an http or https URL: {url}")
         self.index = index
         self.url = url
         self.provenance = "gps:nominatim"
@@ -1348,9 +1351,10 @@ def _apply_entry(
     )
     temporary = Path(temporary_name)
     try:
-        with source.open("rb") as input_handle, os.fdopen(
-            descriptor, "wb"
-        ) as output_handle:
+        with (
+            source.open("rb") as input_handle,
+            os.fdopen(descriptor, "wb") as output_handle,
+        ):
             _emit_progress(progress, f"Copying to temporary file: {temporary}")
             _copy_with_progress(
                 input_handle,
@@ -1460,7 +1464,7 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--geocoder-url",
         default=DEFAULT_GEOCODER_URL,
-        help="reverse-geocoding endpoint (default: %(default)s)",
+        help="http(s) reverse-geocoding endpoint (default: %(default)s)",
     )
     parser.add_argument(
         "--verbose",

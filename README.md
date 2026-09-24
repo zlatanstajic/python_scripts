@@ -173,7 +173,8 @@ Passing
 `--allow-network-geocoding` explicitly permits coordinates to be sent to the
 OpenStreetMap Nominatim reverse-geocoding service; responses are cached in the
 SQLite metadata index. Public-server requests are serialized and limited to
-one per second; use `--geocoder-url` for another compatible service. Review the
+one per second; use `--geocoder-url` with an `http` or `https` URL for another
+compatible service. Review the
 [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/)
 before opting in. See the [media organizer guide](docs/media_organizer.rst) for
 metadata rules, overrides, cache behavior, and limitations.
@@ -220,7 +221,7 @@ with warnings treated as errors using:
 python -m sphinx -W -b html docs docs/_build/html
 ```
 
-CI runs the Python checks on Python 3.10–3.12 for pushes to `master` and pull
+CI runs the Python checks on Python 3.10–3.13 for pushes to `master` and pull
 requests targeting it. A separate documentation workflow builds Sphinx with
 warnings as errors; see the [CI/CD guide](docs/cicd.rst) for details.
 

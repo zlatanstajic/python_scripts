@@ -10,8 +10,9 @@ Three independent Python CLI utilities, packaged as the `scripts` package:
 - `scripts/screenshot.py` — 1600x900 Chromium/Playwright JPEG screenshots per configured site.
 - `scripts/media_organizer.py` — copy-only, manifest-driven media organization.
 
-The scripts share no code beyond duplicated `load_environment` / `required_setting`
-helpers. General automation utilities that used to live here moved to the sibling
+The scripts share no code; the CV and screenshot scripts each carry duplicated
+`load_environment` / `required_setting` helpers. General automation utilities that
+used to live here moved to the sibling
 `shell-scripts` repository — do not re-add them.
 
 ## Setup
@@ -46,20 +47,24 @@ python -m compileall -q scripts tests
 
 python -m sphinx -W -b html docs docs/_build/html   # docs; warnings are errors
 python tools/gen-og-image.py                        # regenerate social preview (Pillow)
-python setup/install-pre-commit.py                  # install the git pre-commit hook
+python setup/install-pre-commit.py                  # install the gate as the pre-commit hook
 ```
 
-CI (`.github/workflows/ci.yml`) runs the documented checks on Python
-3.10/3.11/3.12; `deploy-docs.yml` builds Sphinx with warnings as errors and
+The hook installer backs up a different existing hook to `pre-commit.bak`
+(then `.bak.1`, ...) instead of overwriting it.
+
+CI (`.github/workflows/ci.yml`) runs the documented checks except Sphinx on Python
+3.10–3.13; `deploy-docs.yml` builds Sphinx with warnings as errors and
 publishes `docs/` to GitHub Pages on relevant pushes to `master`.
 
 ## Configuration model
 
-Both scripts read configuration **only** from a `.env` file in the *current working
-directory* (`Path.cwd() / ".env"`), loaded with `override=False` so real environment
-variables win. A missing `.env` is a hard error. Neither CLI has options beyond
-`-h`/`--help`. Any new setting must be documented in
-`.env.example`. Never read or write the real `.env`.
+`cv_generator` and `screenshot` read configuration **only** from a `.env` file in
+the *current working directory* (`Path.cwd() / ".env"`), loaded with
+`override=False` so real environment variables win. A missing `.env` is a hard
+error. Neither CLI has options beyond `-h`/`--help`, and any new setting must be
+documented in `.env.example`. `media_organizer` reads no `.env`: it is configured
+only through its `scan`/`plan`/`apply` flags. Never read or write the real `.env`.
 
 ## Conventions that matter here
 
@@ -68,9 +73,10 @@ variables win. A missing `.env` is a hard error. Neither CLI has options beyond
 - `main()` returns an `int` exit code; `if __name__ == "__main__": raise SystemExit(main())`.
   Errors are caught in `main()`, printed as `Error: ...` to stderr, and turned into a
   non-zero return — do not let tracebacks escape.
-- Two lint configs coexist: `pyproject.toml` `[tool.flake8]` (unread by flake8 7) and
-  `.flake8` (the effective one). `mypy.ini` overrides `[tool.mypy]` — it targets 3.11
-  and is laxer. Change both files when tightening rules.
+- Each tool has exactly one config: `.flake8` for flake8 (it cannot read
+  `pyproject.toml`), `mypy.ini` for mypy (targets 3.10), and `pyproject.toml` for
+  Black, isort, pydocstyle, pytest, and coverage. Black infers its target versions
+  from `requires-python`. Bandit is configured only by its command-line flags.
 - Runtime deps go in `pyproject.toml` *and* `requirements.txt`; dev deps in
   `pyproject.toml` *and* `requirements-dev.txt`. Dev tool versions are pinned exactly.
 - Behavior changes must update `README.md` and the relevant page in `docs/`.
@@ -99,7 +105,9 @@ variables win. A missing `.env` is a hard error. Neither CLI has options beyond
   CSS, `COOKIE_BANNER_SELECTORS` removed best-effort (failures ignored per selector).
 - Per-site failures are reported and counted; the process exits 1 if any site
   failed. Output is `<hostname>.jpg`, except GitHub Pages project sites use
-  `<hostname>-<project>.jpg`. Files are overwritten on later runs.
+  `<project>.jpg` with underscores replaced by hyphens
+  (`https://username.github.io/my_project/` → `my-project.jpg`). Files are
+  overwritten on later runs.
 - Tests fake Playwright rather than launching a browser — keep the seams
   (`capture_website`, `load_config`, `hostname_to_filename`) injectable.
 
@@ -121,4 +129,6 @@ variables win. A missing `.env` is a hard error. Neither CLI has options beyond
 - The effective recording timestamp is always the source filesystem mtime,
   labeled `filesystem:mtime`; embedded timestamps do not drive output paths.
 - Network reverse geocoding is disabled unless `--allow-network-geocoding` is
-  supplied. Tests must use fake geocoders and metadata tool output.
+  supplied. `NominatimGeocoder` accepts only http(s) endpoints with a host, which
+  is what justifies its `# nosec B310`. Tests must use fake geocoders and metadata
+  tool output.
