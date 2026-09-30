@@ -2,9 +2,9 @@ CI/CD
 =====
 
 The CI workflow runs on every push to ``master`` and every pull request targeting
-``master``. On Python 3.10, 3.11, and 3.12 it checks the installed entry points,
-runs the test suite with coverage, compiles Python files, and runs flake8,
-isort, Black, mypy, pydocstyle, and Bandit. These checks are blocking.
+``master``. On Python 3.10, 3.11, 3.12, and 3.13 it checks all three installed
+entry points, runs the test suite with coverage, compiles Python files, and runs
+flake8, isort, Black, mypy, pydocstyle, and Bandit. These checks are blocking.
 Coverage upload to Codecov runs on Python 3.12 and is advisory.
 
 The documentation workflow builds this Sphinx site with warnings treated as

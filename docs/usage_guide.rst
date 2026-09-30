@@ -1,8 +1,8 @@
 Usage Guide
 ===========
 
-Installing the project provides two commands, ``cv-generator`` and
-``website-screenshot``. Both read configuration from ``.env``. Copy
+Installing the project provides ``cv-generator``, ``website-screenshot``, and
+``media-organizer``. The first two read configuration from ``.env``. Copy
 ``.env.example`` to ``.env`` and adjust its retained settings.
 
 Where ``.env`` is read from
@@ -50,6 +50,28 @@ by hyphens, so ``https://username.github.io/my_project/`` is written as
 commands accept no options other than ``-h``/``--help``; configure sites and
 destinations only through ``.env``.
 
+Organize a media library
+------------------------
+
+The media organizer takes command-line paths rather than ``.env`` settings.
+Its workflow deliberately separates inspection, approval, and copying:
+
+.. code-block:: bash
+
+   media-organizer scan --input "/home/user/Media" --verbose
+   media-organizer plan --input "/home/user/Media" --output "/home/user/Organized" --verbose
+   media-organizer apply --plan "/home/user/Organized/organization-plan.sqlite3" --verbose
+
+The source directory is recursively scanned and remains unchanged throughout.
+The plan and report default to the output directory and are removed after a
+fully successful apply. They remain available when an entry fails.
+The optional ``--verbose`` flag shows detailed progress during every phase.
+
+Run ``media-organizer report`` inside the organized library to save a SQLite
+inventory of its photos, videos, formats, orientations, and locations as
+``media-report.sqlite3`` in the current directory.
+See :doc:`media_organizer` for the complete safety and metadata behavior.
+
 Running the modules by file path
 --------------------------------
 
@@ -60,14 +82,10 @@ the installed commands:
 
    python3 scripts/cv_generator.py
    python3 scripts/screenshot.py
+   python3 scripts/media_organizer.py --help
 
 Development commands
 --------------------
 
-.. code-block:: bash
-
-   python3 -m pytest tests/
-   python3 -m compileall -q scripts tests
-   python3 -m flake8 scripts/
-   python3 -m mypy scripts/
-   python3 -m sphinx -W -b html docs docs/_build/html
+The complete local quality gate is listed in :doc:`contributing`, and
+:doc:`cicd` describes which of those checks CI runs.

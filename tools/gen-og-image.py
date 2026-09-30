@@ -99,10 +99,10 @@ def main():
         fill=TEXT,
     )
 
-    utility_font = load_font(27, monospace=True)
-    utility_text = "cv_generator.py  |  screenshot.py"
+    utility_font = load_font(21, monospace=True)
+    utility_text = "cv_generator.py | screenshot.py | media_organizer.py"
     draw.text(
-        (left + 52, top + 181),
+        (left + 52, top + 184),
         utility_text,
         font=utility_font,
         fill=MUTED,
@@ -119,8 +119,8 @@ def main():
         fill=TEXT,
     )
 
-    tagline_font = load_font(36)
-    tagline = "Practical Python tools for documents and the web"
+    tagline_font = load_font(32)
+    tagline = "Practical Python tools for documents, the web, and media"
     tagline_bounds = draw.textbbox((0, 0), tagline, font=tagline_font)
     tagline_y = 500 - tagline_bounds[1]
     draw.text(

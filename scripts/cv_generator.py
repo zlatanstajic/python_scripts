@@ -23,10 +23,10 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from xml.etree.ElementTree import Element
 
-import markdown  # type: ignore[import-untyped]
+import markdown
 from dotenv import load_dotenv
-from markdown.extensions import Extension  # type: ignore[import-untyped]
-from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
+from markdown.extensions import Extension
+from markdown.treeprocessors import Treeprocessor
 from weasyprint import HTML
 
 BASE_CSS = """
@@ -312,7 +312,7 @@ def markdown_to_html(
     body = markdown.markdown(
         markdown_text,
         extensions=["extra", "sane_lists", ExperienceHeaderExtension()],
-        output_format="html5",
+        output_format="html",
     )
     return (
         "<!doctype html>\n"

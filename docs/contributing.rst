@@ -18,9 +18,10 @@ Contributions are welcome. To propose a change:
 
 #. **Match the conventions.** Target Python 3.10 or newer, follow PEP 8, use
    ``snake_case``, add type hints where practical, and write Google-style
-   docstrings. Keep lines within 88 characters. Read configuration through
-   ``python-dotenv``, document new keys in ``.env.example``, and never commit a
-   real ``.env`` file or secret.
+   docstrings. Keep lines within 88 characters. The CV and screenshot commands
+   read configuration through ``python-dotenv``; document their new keys in
+   ``.env.example``. The media organizer takes command-line flags instead. Never
+   commit a real ``.env`` file or secret.
 
 #. **Keep documentation and dependencies synchronized.** Update ``README.md``
    and the relevant Sphinx pages when commands, configuration, or behavior
