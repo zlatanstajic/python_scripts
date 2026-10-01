@@ -37,7 +37,8 @@ The repository's former general automation utilities now live in the sibling
 - Python 3.10 or newer
 - WeasyPrint system libraries for PDF generation
 - A Playwright Chromium browser for screenshots
-- FFprobe (from FFmpeg) for media validation and metadata inspection
+- `ffprobe` and `ffmpeg` (both from FFmpeg) for media validation, metadata
+  inspection, exact duplicate detection, and duplicate previews
 - Optional: ExifTool for richer photo, phone, and camcorder metadata
 
 [⬆ back to top](#table-of-contents)
@@ -122,8 +123,10 @@ python scripts/media_organizer.py --help
 ### Media library organizer
 
 The `media-organizer` command handles both photos and videos. It
-uses a reviewable three-step workflow and never moves, renames, deletes, edits,
-re-encodes, or writes metadata into source media:
+uses a reviewable three-step workflow. Its `scan`, `plan`, `apply`, `report`,
+and `duplicates` subcommands never move, rename, delete, edit, re-encode, or
+write metadata into source media; `review-duplicates` is the only subcommand
+that deletes source media:
 
 Supported image formats are JPEG, PNG, HEIC, HEIF, WebP, TIFF, and AVIF;
 existing video-format support is unchanged.
@@ -166,6 +169,36 @@ locality. It also lists every file. Files in the organizer's
 classified the same way `scan` classifies them. `--input` reports on another
 directory, and the report is still saved in the current directory.
 
+To find exact duplicates, such as the same photo or video copied from several
+devices, save a duplicate report and then review it in the browser:
+
+```bash
+media-organizer duplicates --input "/home/user/Media" --verbose
+media-organizer review-duplicates --report duplicate-report.sqlite3
+```
+
+`duplicates` writes `duplicate-report.sqlite3` to the current directory
+(`--report-file` selects another path) and changes no media. It decodes only
+files of equal size and groups them only when FFmpeg produces exactly the same
+frames, so resized, cropped, or recompressed variants are not duplicates. Hard
+links and symlinks to one file count once. The normalized `duplicate_report`,
+`duplicate_groups`, `duplicate_entries`, and `duplicate_skipped` tables record
+the source directory, each copy's device, inode, size, nanosecond mtime, and
+byte and visual SHA-256 digests, the skipped files, and the review status. The
+command exits with status 1 when a candidate cannot be inspected.
+
+`review-duplicates` serves a temporary page at `http://127.0.0.1:8765/`
+(`--port` selects another port on the same loopback address) and opens it in
+the system browser. The page exists only while the command runs; press Ctrl+C
+to stop it. Each group's copies appear side by side with a preview, the path,
+and file details, and every copy has its own delete button.
+**Deleting a copy is permanent and cannot be undone.** The browser asks for
+confirmation first, and the server deletes the file only while it is still an
+unchanged report entry inside the reported directory and another copy of the
+group remains. The report records each deletion and the reason for each copy
+it refused to delete; when the report itself cannot be updated, nothing is
+deleted.
+
 Location path components are transliterated to ASCII and use only Latin
 letters, digits, and hyphen separators. Known localized location names are
 canonicalized to English first (for example, `España` becomes `Spain` and
@@ -181,11 +214,14 @@ Year grouping and generated timestamps use the source file's filesystem
 modification time. Reports identify this explicitly with the
 `filesystem:mtime` provenance and retain its local UTC offset.
 
-`--verbose` is optional on all four subcommands. It displays recursive
-discovery, cache and metadata activity, classification, per-file planning,
-hashing and copying percentages, verification, status persistence, and cleanup.
+`--verbose` is optional on five subcommands: `scan`, `plan`, `apply`, `report`,
+and `duplicates`. It displays recursive discovery, cache and metadata activity,
+classification, per-file planning, frame decoding, hashing and copying
+percentages, verification, status persistence, and cleanup.
 
-FFprobe is required to validate supported photo and video formats. If FFprobe
+FFprobe is required to validate supported photo and video formats, and
+`duplicates` and `review-duplicates` also need `ffmpeg` to decode frames and
+render previews. If FFprobe
 cannot parse a HEIC or HEIF image, ExifTool can validate its file type and
 dimensions instead. ExifTool is also used for richer EXIF, GPS, title, and
 camera metadata and otherwise produces a warning. Without ExifTool, the report

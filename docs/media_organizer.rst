@@ -2,9 +2,11 @@ Media Library Organizer
 =======================
 
 ``media-organizer`` recursively inspects one media directory and
-creates a separate, organized copy. It never moves, renames, deletes,
-modifies, re-encodes, or writes metadata into source media. Input and output
-trees must not overlap.
+creates a separate, organized copy. Its ``scan``, ``plan``, ``apply``,
+``report``, and ``duplicates`` subcommands never move, rename, delete, modify,
+re-encode, or write metadata into source media. ``review-duplicates`` is the
+only subcommand that deletes source media, one confirmed copy at a time; see
+`Duplicate detection and review`_. Input and output trees must not overlap.
 
 Workflow
 --------
@@ -91,14 +93,103 @@ country and locality with ``organized:path`` provenance. Other files are
 classified the same way ``scan`` classifies them. When OpenStreetMap
 Nominatim resolved a location, the report includes its attribution.
 
+Duplicate detection and review
+------------------------------
+
+``duplicates`` finds exact visual duplicates, such as the same photo or video
+copied from several devices, and saves them for review in the browser:
+
+.. code-block:: bash
+
+   media-organizer duplicates --input "/home/user/Media" --verbose
+   media-organizer review-duplicates --report duplicate-report.sqlite3
+
+``duplicates`` requires ``ffmpeg`` and ``ffprobe`` on ``PATH`` and otherwise
+fails before writing anything. It only reads media and writes
+``duplicate-report.sqlite3`` to the current directory, replacing an older
+report there; ``--report-file`` selects another path, which must not use a
+media file extension. Every candidate that discovery finds is considered.
+Candidates that resolve outside the input directory are skipped, and hard
+links and symlinks to one file count once. Only files of equal size are
+decoded and compared.
+
+FFmpeg decodes every visual stream of a photo, or the first visual stream of a
+video, to ``rgba64le`` frames without automatic rotation, and its
+``framehash`` muxer hashes each frame with SHA-256. The visual digest covers
+the displayed size, the rotation, each stream's dimensions and sample aspect
+ratio, and every frame's stream index, size, and hash in order, but not
+timestamps or encoder details. Files are grouped only when these digests are
+identical, so resized, cropped, recompressed, or merely similar media are not
+duplicates. Decoding complete videos is CPU-intensive. Whether HEIC, HEIF, and
+AVIF photos decode depends on the FFmpeg build, and without ExifTool, photos
+that differ only in their EXIF orientation tag can match. A candidate that
+cannot be read, validated, or decoded is recorded as skipped without stopping
+other files, and the command then exits with status 1. The normalized
+database contains:
+
+* ``duplicate_report``: the schema version, creation time, and source
+  directory.
+* ``duplicate_groups``: each group's file size, visual digest, and
+  ``unresolved`` or ``resolved`` status.
+* ``duplicate_entries``: each copy's path, media type, device, inode,
+  nanosecond modification time, byte SHA-256 digest, displayed resolution,
+  duration, ``present`` or ``deleted`` status, and last deletion error.
+* ``duplicate_skipped``: files that could not be compared, with the reason.
+
+``review-duplicates`` binds only to ``127.0.0.1``, on port ``8765`` unless
+``--port`` selects another, and opens a tokenized page in the system browser.
+The page is available only while the command runs in the foreground; Ctrl+C
+stops the server and closes the report, and a busy port makes the command exit
+with status 1. Each unresolved group shows its present copies side by side
+with a preview, path, media type, size, resolution, and duration, and every
+copy has its own delete button, so a group of three or more copies is reviewed
+as one group.
+
+.. warning::
+
+   Deleting a copy permanently removes that file from disk and cannot be
+   undone. The report's status records are an audit trail, not a backup.
+
+A deletion needs an explicit browser confirmation and a POST request carrying
+the page's per-process token; GET requests never delete anything. The server
+then takes the report's write lock, reloads the entry, and requires that it is
+still present in an unresolved group, that its path still resolves inside the
+recorded source directory, that it is a regular file rather than a symlink,
+that its device, inode, size, and nanosecond modification time are unchanged,
+that another copy in the group still matches the report, and that its byte
+SHA-256 digest still matches. Before touching the file, it writes the outcome
+to the report: the copy is marked ``deleted``, and its group becomes
+``resolved`` once fewer than two present copies remain. It then repeats the
+identity check, removes exactly that path, and commits the report only after
+the removal succeeds. A failed check deletes nothing and records a short
+reason on the copy instead, which the page then shows, and repeating a
+submission for a deleted copy or a resolved group changes nothing.
+
+Nothing is deleted when the report cannot be updated, for example because it
+is read-only or locked by another process; the request then fails with a fixed
+error that contains no file details. Removing a file and committing the report
+cannot be one atomic step, so if only the final commit fails, the removed copy
+stays listed as present and then fails revalidation as missing.
+
+Previews are generated on request, and only for report entries that still match
+their recorded identity. A photo preview is one frame scaled to fit 640x640
+pixels, and a video preview is a 3x3 contact sheet of key frames spread over
+its duration, each tile fitting 320x320 pixels. FFmpeg gets 30 seconds per
+preview; a failed, slow, or changed file shows a "Preview unavailable" image
+instead. Every response carries a restrictive Content Security Policy and
+anti-framing, no-sniff, no-referrer, and no-store headers, error responses
+contain no filesystem details, and every rendered path is HTML-escaped.
+
 Progress reporting
 ------------------
 
-``--verbose`` is available on ``scan``, ``plan``, ``apply``, and ``report``. It
-flushes messages immediately so progress remains visible during long
-operations. Scan and report show recursive discovery, cache hits, metadata
-extraction, classification, and skipped files. Plan reports destination
-selection and hashing percentages.
+``--verbose`` is available on ``scan``, ``plan``, ``apply``, ``report``, and
+``duplicates``. It flushes messages immediately so progress remains visible
+during long operations. Scan and report show recursive discovery, cache hits,
+metadata extraction, classification, and skipped files. Plan reports
+destination selection and hashing percentages. Duplicates shows discovery,
+equal-size comparison, metadata extraction, frame decoding, byte hashing
+percentages, and skipped files.
 Apply reports source validation, copying and verification percentages, each
 saved operation status, failures, and final plan cleanup. Without the option,
 the concise command output is unchanged.

@@ -70,6 +70,18 @@ The optional ``--verbose`` flag shows detailed progress during every phase.
 Run ``media-organizer report`` inside the organized library to save a SQLite
 inventory of its photos, videos, formats, orientations, and locations as
 ``media-report.sqlite3`` in the current directory.
+
+To find exact duplicates and then review them, run:
+
+.. code-block:: bash
+
+   media-organizer duplicates --input "/home/user/Media" --verbose
+   media-organizer review-duplicates --report duplicate-report.sqlite3
+
+``duplicates`` saves ``duplicate-report.sqlite3`` in the current directory and
+changes no media. ``review-duplicates`` serves a comparison page at
+``http://127.0.0.1:8765/`` until you press Ctrl+C. It is the only subcommand
+that deletes source media, and every permanent deletion must be confirmed.
 See :doc:`media_organizer` for the complete safety and metadata behavior.
 
 Running the modules by file path

@@ -5,15 +5,23 @@ The command has three phases: ``scan`` reads metadata without changing source
 files, ``plan`` writes SQLite and Markdown manifests, and ``apply`` copies and
 verifies the files described by an approved SQLite manifest. ``report`` writes
 a SQLite inventory of the media in a directory, such as a finished library.
+``duplicates`` saves groups of files with identical decoded visual content to
+a SQLite report without changing them. ``review-duplicates`` serves a
+temporary page on the loopback interface for comparing those copies and is
+the only command that deletes source media: one confirmed copy at a time,
+after revalidating it against the report.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import html
+import http.server
 import json
 import os
 import re
+import secrets
 import shutil
 import sqlite3
 import subprocess
@@ -23,10 +31,13 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
+import webbrowser
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from http import HTTPStatus
 from pathlib import Path
+from stat import S_ISREG
 from typing import Any, BinaryIO, Callable, Iterable, Mapping, Protocol, Sequence, cast
 
 VIDEO_EXTENSIONS = {
@@ -59,6 +70,17 @@ SUPPORTED_SCHEMA_VERSIONS = {1, SCHEMA_VERSION}
 REPORT_SCHEMA_VERSION = 1
 PLAN_FILENAME = "organization-plan.sqlite3"
 REPORT_FILENAME = "media-report.sqlite3"
+DUPLICATE_REPORT_FILENAME = "duplicate-report.sqlite3"
+DUPLICATE_REPORT_SCHEMA_VERSION = 1
+REVIEW_HOST = "127.0.0.1"
+DEFAULT_REVIEW_PORT = 8765
+_PREVIEW_PATH = re.compile(r"/preview/([1-9][0-9]{0,17})")
+_UNAVAILABLE_PREVIEW = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">'
+    b'<rect width="100%" height="100%" fill="#e5e7eb"/>'
+    b'<text x="50%" y="50%" text-anchor="middle" font-family="sans-serif" '
+    b'fill="#374151">Preview unavailable</text></svg>'
+)
 SQLITE_HEADER = b"SQLite format 3\x00"
 COPY_CHUNK_SIZE = 1024 * 1024
 DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/reverse"
@@ -2115,6 +2137,880 @@ def load_report(path: Path) -> dict[str, Any]:
         connection.close()
 
 
+def find_duplicates(
+    source: Path, progress: ProgressCallback | None = None
+) -> dict[str, Any]:
+    """Group the media below source whose decoded visual content is identical.
+
+    Only files of equal size are decoded and compared. Each ``(device, inode)``
+    pair counts once, so a hard link or symlink never forms a group with the
+    file it names, and a candidate resolving outside source is skipped. Source
+    files are only read.
+    """
+    source = source.expanduser().resolve()
+    skipped: list[dict[str, str]] = []
+    identities: set[tuple[int, int]] = set()
+    buckets: dict[int, list[tuple[Path, os.stat_result]]] = {}
+    _emit_progress(progress, f"Scanning recursively: {source}")
+    candidates = discover_media(source)
+    _emit_progress(progress, f"Discovered {len(candidates)} media candidate(s).")
+    for path in candidates:
+        try:
+            if not _is_relative_to(path, source):
+                raise ValueError("Resolves outside the input directory")
+            file_stat = path.stat()
+            if not S_ISREG(file_stat.st_mode):
+                raise ValueError("Not a regular file")
+        except (OSError, ValueError) as error:
+            skipped.append({"path": str(path), "reason": str(error)})
+            _emit_progress(progress, f"Skipped {path}: {error}")
+            continue
+        identity = (file_stat.st_dev, file_stat.st_ino)
+        if identity not in identities:
+            identities.add(identity)
+            buckets.setdefault(file_stat.st_size, []).append((path, file_stat))
+    comparable = [
+        (size, buckets[size]) for size in sorted(buckets) if len(buckets[size]) > 1
+    ]
+    total = sum(len(bucket) for _size, bucket in comparable)
+    _emit_progress(
+        progress,
+        f"Comparing {total} candidate(s) in {len(comparable)} equal-size bucket(s).",
+    )
+    groups: list[dict[str, Any]] = []
+    position = 0
+    for size, bucket in comparable:
+        matches: dict[str, list[tuple[MediaMetadata, os.stat_result]]] = {}
+        for path, file_stat in bucket:
+            position += 1
+            prefix = f"[{position}/{total}]"
+            try:
+                _emit_progress(progress, f"{prefix} Extracting metadata: {path}")
+                metadata = extract_metadata(path)
+                _emit_progress(progress, f"{prefix} Hashing decoded frames: {path}")
+                digest = visual_digest(metadata)
+            except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
+                skipped.append({"path": str(path), "reason": str(error)})
+                _emit_progress(progress, f"{prefix} Skipped: {error}")
+                continue
+            matches.setdefault(digest, []).append((metadata, file_stat))
+        for digest, members in matches.items():
+            if len(members) < 2:
+                continue
+            entries: list[dict[str, Any]] = []
+            for metadata, file_stat in members:
+                try:
+                    entries.append(_duplicate_entry(metadata, file_stat, progress))
+                except (OSError, ValueError) as error:
+                    skipped.append({"path": metadata.path, "reason": str(error)})
+                    _emit_progress(progress, f"Skipped {metadata.path}: {error}")
+            if len(entries) > 1:
+                entries.sort(key=lambda entry: str(entry["path"]))
+                groups.append(
+                    {
+                        "file_size": size,
+                        "visual_digest": digest,
+                        "status": "unresolved",
+                        "entries": entries,
+                    }
+                )
+    groups.sort(key=lambda group: str(group["entries"][0]["path"]))
+    skipped.sort(key=lambda item: item["path"])
+    return {
+        "schema_version": DUPLICATE_REPORT_SCHEMA_VERSION,
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "source_directory": str(source),
+        "groups": groups,
+        "skipped": skipped,
+    }
+
+
+def _duplicate_entry(
+    metadata: MediaMetadata,
+    file_stat: os.stat_result,
+    progress: ProgressCallback | None,
+) -> dict[str, Any]:
+    """Hash a matched file and record the identity a later deletion must match."""
+    path = Path(metadata.path)
+    _emit_progress(progress, f"Hashing bytes: {path}")
+    byte_digest = sha256_file(
+        path,
+        _percentage_progress(progress, "Byte hash") if progress is not None else None,
+    )
+    if _file_identity(path.stat()) != _file_identity(file_stat):
+        raise ValueError("Changed during duplicate detection")
+    size = display_size(metadata)
+    return {
+        "path": str(path),
+        "media_type": metadata.media_type,
+        "device": file_stat.st_dev,
+        "inode": file_stat.st_ino,
+        "mtime_ns": file_stat.st_mtime_ns,
+        "sha256": byte_digest,
+        "resolution": f"{size[0]}x{size[1]}" if size else None,
+        "duration": metadata.duration,
+        "status": "present",
+        "error": None,
+    }
+
+
+def _file_identity(file_stat: os.stat_result) -> tuple[int, int, int, int]:
+    """Return the device, inode, size, and nanosecond mtime of a file."""
+    return file_stat.st_dev, file_stat.st_ino, file_stat.st_size, file_stat.st_mtime_ns
+
+
+def visual_digest(metadata: MediaMetadata) -> str:
+    """Return a SHA-256 digest of the decoded visual content of a media file.
+
+    FFmpeg decodes every visual stream of a photo, or the first visual stream of
+    a video, to ``rgba64le`` frames without applying rotation. The digest covers
+    the displayed size, the rotation, each stream's ``#dimensions`` and ``#sar``
+    lines, and each frame's stream index, byte size, and hash in order, but not
+    timestamps or the ``#software`` and ``#tb`` lines.
+    """
+    if metadata.media_type == "image" and "%" in metadata.path:
+        raise ValueError("FFmpeg reads '%' in an image path as a sequence pattern")
+    command = (
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-noautorotate",
+        "-i",
+        metadata.path,
+        "-map",
+        "0:v" if metadata.media_type == "image" else "0:v:0",
+        "-pix_fmt",
+        "rgba64le",
+        "-f",
+        "framehash",
+        "-hash",
+        "sha256",
+        "-",
+    )
+    digest = hashlib.sha256()
+    digest.update(f"display {display_size(metadata)}\n".encode())
+    digest.update(f"rotation {metadata.rotation}\n".encode())
+    frames = 0
+    unexpected = False
+    for line in _framehash_lines(command):
+        if line.startswith(("#dimensions", "#sar")):
+            digest.update(f"{line.strip()}\n".encode())
+        elif line.strip() and not line.startswith("#"):
+            fields = [field.strip() for field in line.split(",")]
+            if len(fields) < 6:
+                unexpected = True
+                continue
+            digest.update(f"{fields[0]},{fields[4]},{fields[5]}\n".encode())
+            frames += 1
+    if unexpected or not frames:
+        raise RuntimeError("FFmpeg produced no usable frame hashes")
+    return digest.hexdigest()
+
+
+def _framehash_lines(command: Sequence[str]) -> Iterable[str]:
+    """Yield FFmpeg ``framehash`` output lines as they are produced.
+
+    Unlike ``_run_json``, this neither buffers the output nor stops after a
+    fixed time, because decoding a complete video can take much longer.
+    """
+    with tempfile.TemporaryFile() as errors:
+        try:
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=errors,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except OSError as error:
+            raise RuntimeError(f"FFmpeg could not start: {error}") from error
+        with process:
+            finished = False
+            try:
+                for line in cast(Iterable[str], process.stdout):
+                    yield line.rstrip("\n")
+                finished = True
+            finally:
+                if not finished:
+                    process.kill()
+        if process.returncode:
+            errors.seek(0)
+            details = errors.read().decode("utf-8", "replace").strip().splitlines()
+            raise RuntimeError(details[-1] if details else "FFmpeg could not decode")
+
+
+def write_duplicate_report(report: Mapping[str, Any], path: Path) -> None:
+    """Atomically store duplicate groups in a normalized SQLite database."""
+    _atomic_sqlite_write(
+        path, lambda connection: _store_duplicate_report(connection, report)
+    )
+
+
+def _store_duplicate_report(
+    connection: sqlite3.Connection, report: Mapping[str, Any]
+) -> None:
+    """Create the duplicate report schema and insert one detection run."""
+    connection.executescript(
+        """
+        CREATE TABLE duplicate_report (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            schema_version INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            source_directory TEXT NOT NULL
+        );
+        CREATE TABLE duplicate_groups (
+            id INTEGER PRIMARY KEY,
+            file_size INTEGER NOT NULL,
+            visual_digest TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('unresolved', 'resolved'))
+        );
+        CREATE TABLE duplicate_entries (
+            id INTEGER PRIMARY KEY,
+            group_id INTEGER NOT NULL REFERENCES duplicate_groups (id),
+            path TEXT NOT NULL UNIQUE,
+            media_type TEXT NOT NULL,
+            device INTEGER NOT NULL,
+            inode INTEGER NOT NULL,
+            mtime_ns INTEGER NOT NULL,
+            sha256 TEXT NOT NULL,
+            resolution TEXT,
+            duration REAL,
+            status TEXT NOT NULL CHECK (status IN ('present', 'deleted')),
+            error TEXT,
+            UNIQUE (device, inode)
+        );
+        CREATE TABLE duplicate_skipped (
+            position INTEGER PRIMARY KEY,
+            path TEXT NOT NULL,
+            reason TEXT NOT NULL
+        );
+        """
+    )
+    connection.execute(
+        "INSERT INTO duplicate_report VALUES (1, ?, ?, ?)",
+        (report["schema_version"], report["created_at"], report["source_directory"]),
+    )
+    entry_id = 0
+    for group_id, group in enumerate(report["groups"], start=1):
+        connection.execute(
+            "INSERT INTO duplicate_groups VALUES (?, ?, ?, ?)",
+            (group_id, group["file_size"], group["visual_digest"], group["status"]),
+        )
+        for entry in group["entries"]:
+            entry_id += 1
+            connection.execute(
+                """
+                INSERT INTO duplicate_entries VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entry_id,
+                    group_id,
+                    entry["path"],
+                    entry["media_type"],
+                    entry["device"],
+                    entry["inode"],
+                    entry["mtime_ns"],
+                    entry["sha256"],
+                    entry["resolution"],
+                    entry["duration"],
+                    entry["status"],
+                    entry["error"],
+                ),
+            )
+    connection.executemany(
+        "INSERT INTO duplicate_skipped VALUES (?, ?, ?)",
+        [
+            (position, item["path"], item["reason"])
+            for position, item in enumerate(report["skipped"], start=1)
+        ],
+    )
+
+
+def load_duplicate_report(path: Path) -> dict[str, Any]:
+    """Load a duplicate report after validating its schema and relations."""
+    path = path.expanduser().resolve()
+    if not _is_sqlite_database(path):
+        raise ValueError(f"Not a SQLite duplicate report: {path}")
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    try:
+        _validate_duplicate_report(connection)
+        row = connection.execute(
+            """
+            SELECT schema_version, created_at, source_directory
+            FROM duplicate_report WHERE id = 1
+            """
+        ).fetchone()
+        groups = {
+            group["id"]: {**dict(group), "entries": []}
+            for group in connection.execute(
+                """
+                SELECT id, file_size, visual_digest, status
+                FROM duplicate_groups ORDER BY id
+                """
+            )
+        }
+        for entry in connection.execute(
+            """
+            SELECT id, group_id, path, media_type, device, inode, mtime_ns, sha256,
+                resolution, duration, status, error
+            FROM duplicate_entries ORDER BY id
+            """
+        ):
+            values = dict(entry)
+            groups[values.pop("group_id")]["entries"].append(values)
+        return {
+            **dict(row),
+            "groups": list(groups.values()),
+            "skipped": [
+                dict(item)
+                for item in connection.execute(
+                    "SELECT path, reason FROM duplicate_skipped ORDER BY position"
+                )
+            ],
+        }
+    except sqlite3.DatabaseError as error:
+        raise ValueError(f"Malformed duplicate report: {error}") from error
+    finally:
+        connection.close()
+
+
+def _validate_duplicate_report(connection: sqlite3.Connection) -> None:
+    """Reject missing tables, unsupported versions, and broken group relations."""
+    tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    required = {
+        "duplicate_report",
+        "duplicate_groups",
+        "duplicate_entries",
+        "duplicate_skipped",
+    }
+    if not required <= tables:
+        missing = ", ".join(sorted(required - tables))
+        raise ValueError(f"Duplicate report is missing tables: {missing}")
+    row = connection.execute(
+        "SELECT schema_version FROM duplicate_report WHERE id = 1"
+    ).fetchone()
+    if row is None or row[0] != DUPLICATE_REPORT_SCHEMA_VERSION:
+        raise ValueError("Unsupported duplicate report schema version")
+    broken = connection.execute(
+        """
+        SELECT 1 FROM duplicate_entries
+        WHERE group_id NOT IN (SELECT id FROM duplicate_groups)
+        UNION ALL
+        SELECT 1 FROM duplicate_groups
+        WHERE (
+            SELECT COUNT(*) FROM duplicate_entries
+            WHERE duplicate_entries.group_id = duplicate_groups.id
+        ) < 2
+        LIMIT 1
+        """
+    ).fetchone()
+    if broken is not None:
+        raise ValueError("Duplicate report has invalid group-entry relations")
+
+
+def serve_duplicate_review(report_path: Path, port: int = DEFAULT_REVIEW_PORT) -> None:
+    """Serve the review page for a duplicate report until interrupted.
+
+    The system browser opens the tokenized page once the loopback port is
+    bound. Requests are handled one at a time, and the server and the report
+    database are closed when serving ends, including after Ctrl+C.
+    """
+    server = DuplicateReviewServer(report_path, port)
+    try:
+        print(f"Reviewing {server.report_path} at {server.url}", flush=True)
+        print("Press Ctrl+C to stop the review server.", flush=True)
+        webbrowser.open(server.url)
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Stopped the review server.", flush=True)
+    finally:
+        server.server_close()
+
+
+class DuplicateReviewServer(http.server.HTTPServer):
+    """Serve one duplicate report on the loopback interface, one request at a time."""
+
+    def __init__(self, report_path: Path, port: int = DEFAULT_REVIEW_PORT) -> None:
+        """Validate and open the report, then bind to ``REVIEW_HOST``."""
+        if not 0 <= port <= 65535:
+            raise ValueError(f"Port must be between 0 and 65535: {port}")
+        self.report_path = report_path.expanduser().resolve()
+        report = load_duplicate_report(self.report_path)
+        self.source_directory = Path(report["source_directory"])
+        self.token = secrets.token_urlsafe(32)
+        self.nonce = secrets.token_urlsafe(16)
+        # Requests are handled one at a time, so the connection is never shared
+        # concurrently, even when a test serves from another thread.
+        self.connection = sqlite3.connect(self.report_path, check_same_thread=False)
+        self.connection.row_factory = sqlite3.Row
+        try:
+            super().__init__((REVIEW_HOST, port), DuplicateReviewHandler)
+        except OSError as error:
+            raise OSError(
+                f"Cannot serve on {REVIEW_HOST}:{port}: {error.strerror or error}; "
+                "stop the other server or choose another --port"
+            ) from error
+
+    @property
+    def url(self) -> str:
+        """Return the tokenized address of the review page."""
+        return f"http://{REVIEW_HOST}:{self.server_port}/?token={self.token}"
+
+    def server_close(self) -> None:
+        """Close the listening socket and the report database."""
+        super().server_close()
+        self.connection.close()
+
+
+class DuplicateReviewHandler(http.server.BaseHTTPRequestHandler):
+    """Answer token-protected requests for the review page and its previews."""
+
+    server: DuplicateReviewServer
+
+    def log_message(self, format: str, *args: Any) -> None:
+        """Keep request lines, which carry the access token, off the console."""
+
+    def end_headers(self) -> None:
+        """Add the security headers to every response before ending them."""
+        nonce = self.server.nonce
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'none'; img-src 'self'; "
+            f"style-src 'nonce-{nonce}'; script-src 'nonce-{nonce}'; "
+            "form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+        )
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def do_GET(self) -> None:
+        """Serve the review page or one entry's preview to a token holder."""
+        url = urllib.parse.urlsplit(self.path)
+        if self._allowed_method(url.path) != "GET":
+            self._reject_method()
+        elif not self._authorized(urllib.parse.parse_qs(url.query).get("token", [])):
+            self._respond(HTTPStatus.FORBIDDEN, b"Forbidden\n")
+        elif url.path == "/":
+            page = _render_review_page(self.server).encode("utf-8")
+            self._respond(HTTPStatus.OK, page, "text/html; charset=utf-8")
+        else:
+            self._send_preview(int(url.path.rsplit("/", 1)[1]))
+
+    def _reject_method(self) -> None:
+        """Answer 405 on a known route and 404 on any other path."""
+        allowed = self._allowed_method(urllib.parse.urlsplit(self.path).path)
+        if allowed is None:
+            self._respond(HTTPStatus.NOT_FOUND, b"Not found\n")
+        else:
+            self._respond(
+                HTTPStatus.METHOD_NOT_ALLOWED,
+                b"Method not allowed\n",
+                extra_headers=(("Allow", allowed),),
+            )
+
+    def do_POST(self) -> None:
+        """Delete one confirmed copy, then redirect back to the review page.
+
+        A report that cannot be read or updated gets a fixed 500 response.
+        """
+        if urllib.parse.urlsplit(self.path).path != "/delete":
+            self._reject_method()
+            return
+        form = self._read_form()
+        if form is None:
+            self._respond(HTTPStatus.BAD_REQUEST, b"Bad request\n")
+            return
+        try:
+            outcome = delete_duplicate_entry(
+                self.server.connection,
+                self.server.source_directory,
+                form,
+                self.server.token,
+            )
+        except sqlite3.Error:
+            self._respond(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                b"The duplicate report could not be updated\n",
+            )
+            return
+        rejected = {
+            "forbidden": (HTTPStatus.FORBIDDEN, b"Forbidden\n"),
+            "unconfirmed": (HTTPStatus.BAD_REQUEST, b"Deletion was not confirmed\n"),
+            "unknown": (HTTPStatus.NOT_FOUND, b"Not found\n"),
+            "resolved": (
+                HTTPStatus.CONFLICT,
+                b"This copy or its group is already resolved\n",
+            ),
+        }
+        if outcome in rejected:
+            self._respond(*rejected[outcome])
+        else:
+            location = f"/?token={self.server.token}"
+            self._respond(
+                HTTPStatus.SEE_OTHER, b"", extra_headers=(("Location", location),)
+            )
+
+    do_PUT = do_PATCH = do_DELETE = _reject_method
+    do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _reject_method
+
+    @staticmethod
+    def _allowed_method(path: str) -> str | None:
+        """Return the method a route accepts, or None for an unknown path."""
+        if path == "/" or _PREVIEW_PATH.fullmatch(path):
+            return "GET"
+        if path == "/delete":
+            return "POST"
+        return None
+
+    def _read_form(self) -> dict[str, list[str]] | None:
+        """Return a small URL-encoded request body, or None when it is invalid."""
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return None
+        if not 0 <= length <= 4096:
+            return None
+        body = self.rfile.read(length).decode("utf-8", "replace")
+        return urllib.parse.parse_qs(body, keep_blank_values=True)
+
+    def _authorized(self, tokens: Sequence[str]) -> bool:
+        """Return whether a request carried exactly this process's token."""
+        return len(tokens) == 1 and secrets.compare_digest(
+            tokens[0].encode("utf-8"), self.server.token.encode("utf-8")
+        )
+
+    def _send_preview(self, entry_id: int) -> None:
+        """Send a report entry's preview, or the unavailable-preview image."""
+        entry = _review_entry(self.server.connection, entry_id)
+        if entry is None:
+            self._respond(HTTPStatus.NOT_FOUND, b"Not found\n")
+            return
+        preview = _entry_preview(entry, self.server.source_directory)
+        if preview is None:
+            self._respond(HTTPStatus.OK, _UNAVAILABLE_PREVIEW, "image/svg+xml")
+        else:
+            self._respond(HTTPStatus.OK, preview, "image/jpeg")
+
+    def _respond(
+        self,
+        status: HTTPStatus,
+        body: bytes,
+        content_type: str = "text/plain; charset=utf-8",
+        extra_headers: Sequence[tuple[str, str]] = (),
+    ) -> None:
+        """Send one complete response."""
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        for name, value in extra_headers:
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def _review_entry(connection: sqlite3.Connection, entry_id: int) -> sqlite3.Row | None:
+    """Return one report entry with its group's file size and status."""
+    return cast(
+        "sqlite3.Row | None",
+        connection.execute(
+            """
+            SELECT duplicate_entries.*, duplicate_groups.file_size,
+                duplicate_groups.status AS group_status
+            FROM duplicate_entries
+            JOIN duplicate_groups ON duplicate_groups.id = duplicate_entries.group_id
+            WHERE duplicate_entries.id = ?
+            """,
+            (entry_id,),
+        ).fetchone(),
+    )
+
+
+def _recorded_file_problem(entry: sqlite3.Row, source_directory: Path) -> str | None:
+    """Return why a report entry no longer names its recorded file, or None."""
+    path = Path(entry["path"])
+    try:
+        inside = _is_relative_to(path.resolve(), source_directory)
+        file_stat = os.lstat(path)
+    except (OSError, RuntimeError):
+        return "The file is no longer available"
+    if not inside:
+        return "The file is outside the report's source directory"
+    if not S_ISREG(file_stat.st_mode):
+        return "The path is no longer a regular file"
+    recorded = (entry["device"], entry["inode"], entry["file_size"], entry["mtime_ns"])
+    if _file_identity(file_stat) != recorded:
+        return "The file changed after duplicate detection"
+    return None
+
+
+def _entry_preview(entry: sqlite3.Row, source_directory: Path) -> bytes | None:
+    """Return a bounded JPEG preview of an unchanged report entry, if possible.
+
+    A photo becomes one frame scaled to fit 640x640 pixels. A video becomes a
+    3x3 contact sheet of key frames spread over its duration, each scaled to
+    fit 320x320 pixels. FFmpeg gets 30 seconds per preview.
+    """
+    if _recorded_file_problem(entry, source_directory) is not None:
+        return None
+    if entry["media_type"] == "image":
+        options: tuple[str, ...] = ()
+        video_filter = (
+            "scale='min(640,iw)':'min(640,ih)':force_original_aspect_ratio=decrease"
+        )
+    else:
+        interval = max((_as_float(entry["duration"]) or 0.0) / 9, 0.1)
+        options = ("-skip_frame", "nokey")
+        video_filter = (
+            f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.3f})',"
+            "scale=320:320:force_original_aspect_ratio=decrease,tile=3x3"
+        )
+    command = (
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        *options,
+        "-i",
+        str(entry["path"]),
+        "-map",
+        "0:v:0",
+        "-vf",
+        video_filter,
+        "-frames:v",
+        "1",
+        "-f",
+        "image2pipe",
+        "-c:v",
+        "mjpeg",
+        "-",
+    )
+    try:
+        result = subprocess.run(command, capture_output=True, check=False, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode or not result.stdout.startswith(b"\xff\xd8"):
+        return None
+    return result.stdout
+
+
+def delete_duplicate_entry(
+    connection: sqlite3.Connection,
+    source_directory: Path,
+    form: Mapping[str, Sequence[str]],
+    token: str,
+) -> str:
+    """Delete one confirmed duplicate copy after revalidating it against the report.
+
+    Returns ``"forbidden"`` or ``"unconfirmed"`` before the report is opened for
+    writing, and ``"unknown"`` or ``"resolved"`` without touching any file.
+    Otherwise the report's write lock is taken with ``BEGIN IMMEDIATE`` before
+    the entry is reloaded, and the file is checked again. A deletion is written
+    to the report before the file is removed and committed only after removal
+    succeeds, returning ``"deleted"``. A copy that fails a check is kept with a
+    sanitized error on its entry, returning ``"failed"``. A ``sqlite3.Error``
+    from a read-only, locked, or unwritable report rolls the transaction back and
+    propagates; when it is raised before removal, the file is untouched.
+    """
+    fields = {name: values[0] for name, values in form.items() if len(values) == 1}
+    submitted = fields.get("token", "").encode("utf-8")
+    if not secrets.compare_digest(submitted, token.encode("utf-8")):
+        return "forbidden"
+    if fields.get("confirmed") != "yes":
+        return "unconfirmed"
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        outcome = _delete_under_lock(
+            connection, fields.get("entry", ""), source_directory
+        )
+        connection.commit()
+    finally:
+        if connection.in_transaction:
+            connection.rollback()
+    return outcome
+
+
+def _delete_under_lock(
+    connection: sqlite3.Connection, entry_id: str, source_directory: Path
+) -> str:
+    """Revalidate and delete one entry inside the open report write transaction."""
+    entry = None
+    if re.fullmatch(r"[1-9][0-9]{0,17}", entry_id):
+        entry = _review_entry(connection, int(entry_id))
+    if entry is None:
+        return "unknown"
+    if entry["status"] != "present" or entry["group_status"] != "unresolved":
+        return "resolved"
+    problem = _deletion_problem(connection, entry, source_directory)
+    if problem is None:
+        connection.execute("SAVEPOINT deletion")
+        connection.execute(
+            """
+            UPDATE duplicate_entries SET status = 'deleted', error = NULL
+            WHERE id = ?
+            """,
+            (entry["id"],),
+        )
+        connection.execute(
+            """
+            UPDATE duplicate_groups SET status = 'resolved'
+            WHERE id = ? AND (
+                SELECT COUNT(*) FROM duplicate_entries
+                WHERE group_id = ? AND status = 'present'
+            ) < 2
+            """,
+            (entry["group_id"], entry["group_id"]),
+        )
+        problem = _recorded_file_problem(entry, source_directory)
+        if problem is None:
+            try:
+                os.unlink(entry["path"])
+            except OSError as error:
+                reason = error.strerror or "operating system error"
+                problem = f"Deletion failed: {reason}"
+            else:
+                return "deleted"
+        connection.execute("ROLLBACK TO deletion")
+    connection.execute(
+        "UPDATE duplicate_entries SET error = ? WHERE id = ?",
+        (problem, entry["id"]),
+    )
+    return "failed"
+
+
+def _deletion_problem(
+    connection: sqlite3.Connection, entry: sqlite3.Row, source_directory: Path
+) -> str | None:
+    """Return why an entry's file must be kept, or None once it is revalidated."""
+    problem = _recorded_file_problem(entry, source_directory)
+    if problem is not None:
+        return problem
+    siblings = connection.execute(
+        """
+        SELECT duplicate_entries.*, duplicate_groups.file_size
+        FROM duplicate_entries
+        JOIN duplicate_groups ON duplicate_groups.id = duplicate_entries.group_id
+        WHERE duplicate_entries.group_id = ? AND duplicate_entries.id != ?
+            AND duplicate_entries.status = 'present'
+        """,
+        (entry["group_id"], entry["id"]),
+    ).fetchall()
+    if all(_recorded_file_problem(sibling, source_directory) for sibling in siblings):
+        return "No other copy in this group still matches the report"
+    try:
+        if sha256_file(Path(entry["path"])) != entry["sha256"]:
+            return "The file content changed after duplicate detection"
+    except OSError as error:
+        return f"Deletion failed: {error.strerror or 'operating system error'}"
+    return None
+
+
+def _render_review_page(server: DuplicateReviewServer) -> str:
+    """Return the review page with side-by-side cards for unresolved groups."""
+    groups: dict[int, list[sqlite3.Row]] = {}
+    for row in server.connection.execute(
+        """
+        SELECT duplicate_entries.*, duplicate_groups.file_size
+        FROM duplicate_entries
+        JOIN duplicate_groups ON duplicate_groups.id = duplicate_entries.group_id
+        WHERE duplicate_groups.status = 'unresolved'
+            AND duplicate_entries.status = 'present'
+        ORDER BY duplicate_groups.id, duplicate_entries.id
+        """
+    ):
+        groups.setdefault(row["group_id"], []).append(row)
+    token = _html(server.token)
+    sections = "".join(
+        _render_review_group(group_id, rows, token) for group_id, rows in groups.items()
+    )
+    style = (
+        "body{font-family:system-ui,sans-serif;margin:1.5rem;color:#1f2937;"
+        "background:#f9fafb}.cards{display:grid;gap:1rem;"
+        "grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}"
+        ".card{background:#fff;border:1px solid #d1d5db;border-radius:.5rem;"
+        "padding:1rem}.card img{display:block;width:100%;height:18rem;"
+        "object-fit:contain;background:#e5e7eb}dt{font-weight:600}"
+        "dd{margin:0 0 .5rem;overflow-wrap:anywhere}"
+        ".error,.warning{color:#991b1b}.warning{font-weight:600}"
+        "button{background:#b91c1c;color:#fff;border:0;border-radius:.375rem;"
+        "padding:.5rem 1rem;cursor:pointer}"
+    )
+    script = (
+        'for (const form of document.querySelectorAll("form.delete")) {'
+        'form.addEventListener("submit", (event) => {'
+        "if (!window.confirm(form.dataset.confirm)) {"
+        "event.preventDefault();"
+        "return;"
+        "}"
+        'form.elements.confirmed.value = "yes";'
+        "});"
+        "}"
+    )
+    return (
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        "<title>Duplicate review</title>"
+        f'<style nonce="{_html(server.nonce)}">{style}</style></head><body>'
+        "<h1>Duplicate review</h1>"
+        f"<p>Source directory: <code>{_html(server.source_directory)}</code></p>"
+        '<p class="warning">Deleting a copy permanently removes that file from '
+        "disk and cannot be undone. Every deletion asks for confirmation.</p>"
+        f"{sections or '<p>No unresolved duplicate groups remain.</p>'}"
+        f'<script nonce="{_html(server.nonce)}">{script}</script>'
+        "</body></html>"
+    )
+
+
+def _render_review_group(group_id: int, rows: Sequence[sqlite3.Row], token: str) -> str:
+    """Return one group's section with a card for each present copy."""
+    cards = []
+    for row in rows:
+        entry_id = _html(row["id"])
+        duration = (
+            "not applicable" if row["duration"] is None else f"{row['duration']} s"
+        )
+        error = f'<p class="error">{_html(row["error"])}</p>' if row["error"] else ""
+        confirm = f"Permanently delete {row['path']}? This cannot be undone."
+        cards.append(
+            '<article class="card">'
+            f'<img src="/preview/{entry_id}?token={token}" '
+            f'alt="Preview of copy {entry_id}" loading="lazy">'
+            f"<dl><dt>Path</dt><dd>{_html(row['path'])}</dd>"
+            f"<dt>Media type</dt><dd>{_html(row['media_type'])}</dd>"
+            f"<dt>Size</dt><dd>{_html(row['file_size'])} bytes</dd>"
+            f"<dt>Resolution</dt><dd>{_html(row['resolution'] or 'unknown')}</dd>"
+            f"<dt>Duration</dt><dd>{_html(duration)}</dd></dl>"
+            f"{error}"
+            '<form method="post" action="/delete" class="delete" '
+            f'data-confirm="{_html(confirm)}">'
+            f'<input type="hidden" name="token" value="{token}">'
+            f'<input type="hidden" name="entry" value="{entry_id}">'
+            '<input type="hidden" name="confirmed" value="">'
+            '<button type="submit">Delete this copy</button></form>'
+            "</article>"
+        )
+    return (
+        '<section class="group">'
+        f"<h2>Group {_html(group_id)}: {len(rows)} identical copies</h2>"
+        f'<div class="cards">{"".join(cards)}</div></section>'
+    )
+
+
+def _html(value: Any) -> str:
+    """Return a value as HTML-escaped text."""
+    return html.escape(str(value))
+
+
 def _add_scan_options(parser: argparse.ArgumentParser) -> None:
     """Add the metadata and classification options shared by media scans."""
     parser.add_argument("--overrides", type=Path, help="optional classification JSON")
@@ -2142,10 +3038,11 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
 
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse the scan, plan, apply, and report command-line interface."""
+    """Parse the scan, plan, apply, report, and duplicate command-line interface."""
     parser = argparse.ArgumentParser(
         description="Organize photos and videos by year and parent locality without "
-        "changing the source library."
+        "changing the source library. Only review-duplicates deletes source media, "
+        "one confirmed copy at a time."
     )
     commands = parser.add_subparsers(dest="command", required=True)
     scan_parser = commands.add_parser("scan", help="inspect media without copying")
@@ -2180,6 +3077,37 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
         help="media directory to report on (default: current directory)",
     )
     _add_scan_options(report_parser)
+    duplicates_parser = commands.add_parser(
+        "duplicates",
+        help=f"write exact visual duplicate groups to {DUPLICATE_REPORT_FILENAME}",
+    )
+    duplicates_parser.add_argument(
+        "--input", required=True, type=Path, help="media directory to search"
+    )
+    duplicates_parser.add_argument(
+        "--report-file",
+        type=Path,
+        help=f"SQLite report path (default: ./{DUPLICATE_REPORT_FILENAME})",
+    )
+    duplicates_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="show discovery, decoding, and hashing progress",
+    )
+    review_parser = commands.add_parser(
+        "review-duplicates",
+        help=f"compare duplicates on a temporary page at {REVIEW_HOST} and delete "
+        "confirmed copies",
+    )
+    review_parser.add_argument(
+        "--report", required=True, type=Path, help="report written by duplicates"
+    )
+    review_parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_REVIEW_PORT,
+        help="loopback port to serve on (default: %(default)s)",
+    )
     return parser.parse_args(arguments)
 
 
@@ -2270,6 +3198,34 @@ def main(arguments: Sequence[str] | None = None) -> int:
             if args.allow_network_geocoding:
                 print(NOMINATIM_ATTRIBUTION)
             return 1 if skipped else 0
+
+        if args.command == "duplicates":
+            missing = [tool for tool in ("ffmpeg", "ffprobe") if not shutil.which(tool)]
+            if missing:
+                raise RuntimeError(
+                    f"{' and '.join(missing)} must be installed and on PATH"
+                )
+            report_file = args.report_file or Path.cwd() / DUPLICATE_REPORT_FILENAME
+            report_file = report_file.expanduser().resolve()
+            if report_file.suffix.lower() in SUPPORTED_EXTENSIONS:
+                raise ValueError(
+                    "The duplicate report must not use a media file extension"
+                )
+            duplicates = find_duplicates(
+                args.input, _console_progress if args.verbose else None
+            )
+            write_duplicate_report(duplicates, report_file)
+            copies = sum(len(group["entries"]) for group in duplicates["groups"])
+            print(f"Wrote {report_file}.")
+            print(
+                f"Found: {len(duplicates['groups'])} duplicate group(s), {copies} "
+                f"copies, {len(duplicates['skipped'])} skipped; no files changed."
+            )
+            return 1 if duplicates["skipped"] else 0
+
+        if args.command == "review-duplicates":
+            serve_duplicate_review(args.report, args.port)
+            return 0
 
         copied, already, failed = apply_plan(
             args.plan, _console_progress if args.verbose else None

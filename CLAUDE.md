@@ -31,7 +31,7 @@ WeasyPrint needs its system libraries (pango/cairo) present for PDF generation.
 ```bash
 python scripts/cv_generator.py        # reads MARKDOWN_FILE_URL, PDF_OUTPUT_LOCATION
 python scripts/screenshot.py          # reads SCREENSHOT_SITES, SCREENSHOT_OUTPUT_DIR
-python scripts/media_organizer.py -h  # scan, plan, apply, and report subcommands
+python scripts/media_organizer.py -h  # scan, plan, apply, report, duplicates, review-duplicates
 
 python -m pytest tests/                                   # full suite + coverage
 python -m pytest tests/test_screenshot.py::test_load_config_parses_sites_and_creates_output_directory
@@ -64,7 +64,8 @@ the *current working directory* (`Path.cwd() / ".env"`), loaded with
 `override=False` so real environment variables win. A missing `.env` is a hard
 error. Neither CLI has options beyond `-h`/`--help`, and any new setting must be
 documented in `.env.example`. `media_organizer` reads no `.env`: it is configured
-only through its `scan`/`plan`/`apply`/`report` flags. Never read or write the
+only through its `scan`/`plan`/`apply`/`report`/`duplicates`/`review-duplicates`
+flags. Never read or write the
 real `.env`.
 
 ## Conventions that matter here
@@ -115,7 +116,9 @@ real `.env`.
 ## media organizer specifics
 
 - `ffprobe` validates visual streams; `exiftool` enriches metadata when available.
-- The source and output trees must never overlap. Source media files are read-only.
+- The source and output trees must never overlap. Source media files are read-only;
+  the only exception is `review-duplicates`, which deletes one confirmed copy at a
+  time after revalidating it against its duplicate report.
 - `plan` binds entries to source size, nanosecond mtime, and SHA-256; `apply`
   copies via a temporary sibling, verifies the digest, then finalizes without
   overwriting.
