@@ -13,6 +13,9 @@ env/
 # Pipenv
 Pipfile.lock
 
+# uv
+uv.lock
+
 # Marimo cache (if using marimo's cache dir)
 .marimo-cache/
 .marimo/
@@ -55,6 +58,12 @@ coverage.xml
 
 # Local SQLite or other dev DBs
 *.sqlite3
+*.sqlite3-*
+
+# Generated media plans and reports can contain personal paths and locations
+organization-plan.json
+organization-plan.md
+media-report.json
 
 # Marimo notebooks cache (in case custom paths used)
 **/.marimo_cache/
@@ -72,3 +81,4 @@ assets/img/*
 !assets/img/og-image.png
 **/_build
 private
+brag-*

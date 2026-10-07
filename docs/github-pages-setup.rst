@@ -1,14 +1,14 @@
 GitHub Pages Setup Guide
 ========================
 
-This guide explains how to set up GitHub Pages for this project to enable automatic documentation deployment.
+This guide explains how to publish the Sphinx documentation with GitHub Pages.
 
 Prerequisites
 -------------
 
 * Your repository on GitHub
 * Admin or write access to the repository
-* GitHub Actions enabled (usually enabled by default)
+* GitHub Actions enabled
 
 Step-by-Step Setup
 ------------------
@@ -25,39 +25,30 @@ d. Under "Build and deployment" > "Source"
 e. Select **GitHub Actions** as the source
 f. Click **Save**
 
-2. Configure Workflow Permissions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2. Check Workflow Permissions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-a. Go to **Settings** > **Actions** > **General** (left sidebar)
-b. Under "Workflow permissions" section:
-
-   * Select **Read and write permissions**
-   * Check the box: "Allow GitHub Actions to create and approve pull requests"
-
-c. Click **Save**
+The committed workflow gives the build job read-only access and grants the
+deployment job ``pages: write`` and ``id-token: write``. Repository-wide
+read-and-write permission and pull-request approval permission are unnecessary.
 
 3. Verify Workflow Files
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Ensure these files exist in your repository (automatically created):
+Ensure these committed files exist in your repository:
 
 * ``.github/workflows/deploy-docs.yml`` - Handles documentation deployment
 * ``.github/workflows/ci.yml`` - Handles code quality checks
 
-You can view these files by navigating to the `.github/workflows/` directory in your repository.
+You can view these files in the ``.github/workflows/`` directory.
 
 4. Trigger Initial Deployment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Option A: Automatic (Recommended)**
+**Option A: Automatic**
 
-Push code to the ``master`` branch:
-
-.. code-block:: bash
-
-   git add .
-   git commit -m "Enable GitHub Pages deployment"
-   git push origin master
+Merge a change to documentation, scripts, dependencies, or the deployment
+workflow into ``master``. The workflow builds and deploys the documentation.
 
 **Option B: Manual Trigger**
 
@@ -73,8 +64,8 @@ e. Click **"Run workflow"**
 a. Go to the **Actions** tab
 b. Watch the workflow run:
 
-   * **deploy** job: Builds documentation (5-10 minutes usually)
-   * **deploy** job: Deploys to GitHub Pages (1-2 minutes)
+   * **build** job: Builds documentation and uploads the artifact
+   * **deploy** job: Publishes that artifact to GitHub Pages
 
 6. Access Your Documentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -91,15 +82,9 @@ Customizing Deployment
 Changing the Repository URL
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The deploy workflow references the example GitHub Pages URL. If you forked this repository, update the documentation URL:
-
-**In docs/installation.rst:**
-
-This project is configured with the GitHub username **zlatanstajic** and repository name **python_scripts**.
-
-If you forked this repository to your own account, update the URL in documentation files:
-   Change: ``https://zlatanstajic.github.io/python_scripts/``
-   To: ``https://<your-username>.github.io/<your-repo-name>/``
+The workflow uses the Pages deployment URL returned by GitHub. If you fork the
+repository, update any documentation links that still point to this project's
+canonical URL: ``https://zlatanstajic.github.io/python_scripts/``.
 
 Changing Python Version
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -123,7 +108,7 @@ To deploy from a different branch:
 
 **In .github/workflows/deploy-docs.yml:**
 
-Change the ``on.push.branches`` section:
+Change both ``on.push.branches`` and the ``deploy`` job's branch condition:
 
 .. code-block:: yaml
 
@@ -131,6 +116,8 @@ Change the ``on.push.branches`` section:
      push:
        branches:
          - master    # Change to your branch name
+
+The job's ``if`` expression must check the same branch under ``github.ref``.
 
 Excluding Paths From Triggering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -146,49 +133,28 @@ Troubleshooting
 
 **Workflow appears stuck or not running**
 
-1. Check if GitHub Actions is enabled:
-   * Settings > Actions > General > "Actions permissions"
-   * Select: "Allow all actions and reusable workflows"
-
-2. Verify branch protection rules don't block workflows:
-   * Settings > Branches > Branch protection rules
-   * Uncheck: "Require status checks to pass before merging"
+1. Check that GitHub Actions is enabled under **Settings** > **Actions**.
+2. Check the workflow's branch and path filters. Manual runs are available from
+   the **Actions** tab.
 
 **Pages not showing deployed documentation**
 
 1. Verify GitHub Pages is enabled:
    * Settings > Pages > Source should be "GitHub Actions"
 
-2. Check workflow has read-write permissions:
-   * Settings > Actions > General > Workflow permissions
-   * Ensure "Read and write permissions" is selected
+2. Check that the ``deploy`` job has ``pages: write`` and ``id-token: write``
+   permissions and targets the ``github-pages`` environment.
 
 3. Check for build errors:
    * Go to Actions tab
    * Click on the failed workflow run
    * Expand the "Build" job to see error messages
 
-**Getting "Permission denied" error**
-
-1. Go to Settings > Actions > General
-2. Under "Workflow permissions"
-3. Select "Read and write permissions"
-4. Check "Allow GitHub Actions to create and approve pull requests"
-5. Click Save
-
 **Documentation shows old version**
 
 1. Clear browser cache (Ctrl+Shift+Del or Cmd+Shift+Del)
 2. Wait a few minutes for GitHub Pages to update
 3. Check the Actions tab to confirm latest deployment completed
-
-**Domain not pointing correctly**
-
-This typically happens with custom domains:
-
-1. Check that CNAME file exists in your docs directory
-2. Verify DNS settings for your custom domain
-3. Check GitHub Pages settings for proper domain configuration
 
 More Help
 ---------
